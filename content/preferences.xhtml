@@ -1,0 +1,8 @@
+<!-- Moonlit Reader preference pane.
+     The UI is built in JS (preferences.js) so it can be fully localized, themed
+     and validated; this fragment only provides the XUL host. Zotero loads the
+     pane scripts before inserting the markup and fires a non-bubbling "showing"
+     event when the pane becomes visible, which is what boots the UI. -->
+<vbox id="moonlit-prefpane-root" class="moonlit-prefpane-root">
+	<vbox id="moonlit-prefs-host" class="moonlit-prefs-host"/>
+</vbox>

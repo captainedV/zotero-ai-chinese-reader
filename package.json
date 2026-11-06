@@ -1,0 +1,16 @@
+{
+  "name": "moonlit-reader",
+  "version": "1.0.0",
+  "description": "Zotero AI paper reader: sentence-aligned translation, summaries and AI key-point annotations",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs --unpacked",
+    "test": "node test/layout.test.mjs && node test/static.test.mjs",
+    "test:ui": "node test/harness/run.mjs verify \"verify?theme=dark\"",
+    "test:live": "node test/real-api.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}

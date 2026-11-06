@@ -1,0 +1,266 @@
+/* Moonlit Reader — preference pane styles (loaded with the pane). */
+
+#moonlit-prefpane-root,
+#moonlit-prefs-host {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	width: 100%;
+}
+
+.moonlit-prefs {
+	--ml-amber: #fbbf24;
+	--ml-amber-deep: #dfa10a;
+	--ml-amber-soft: rgba(251, 191, 36, 0.16);
+	--ml-ink: #26262b;
+	--ml-ink-2: #55555f;
+	--ml-ink-3: #8b8b96;
+	--ml-line: rgba(38, 38, 43, 0.1);
+	--ml-line-strong: rgba(38, 38, 43, 0.18);
+	--ml-card: #ffffff;
+	--ml-bg: #fbfaf7;
+	--ml-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+		"Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: 4px 10px 24px 4px;
+	max-width: 780px;
+	font-family: var(--ml-font);
+	color: var(--ml-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+	.moonlit-prefs {
+		--ml-ink: #ececf1;
+		--ml-ink-2: #b3b3c0;
+		--ml-ink-3: #83838f;
+		--ml-line: rgba(255, 255, 255, 0.1);
+		--ml-line-strong: rgba(255, 255, 255, 0.2);
+		--ml-card: #1e1e24;
+		--ml-bg: #17171c;
+	}
+}
+
+.moonlit-prefs .ml-hero {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 16px;
+	border-radius: 14px;
+	border: 1px solid var(--ml-line);
+	background:
+		radial-gradient(120% 140% at 0% 0%, var(--ml-amber-soft), transparent 60%),
+		var(--ml-card);
+}
+
+.moonlit-prefs .ml-hero-mark {
+	width: 38px;
+	height: 38px;
+	border-radius: 12px;
+	background: linear-gradient(145deg, #2e2a3f, #17151f);
+	color: var(--ml-amber);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+}
+
+.moonlit-prefs .ml-hero-mark svg {
+	width: 20px;
+	height: 20px;
+}
+
+.moonlit-prefs .ml-hero-title {
+	font-size: 15px;
+	font-weight: 650;
+	line-height: 1.3;
+}
+
+.moonlit-prefs .ml-hero-sub {
+	font-size: 11.5px;
+	color: var(--ml-ink-3);
+	line-height: 1.45;
+	margin-top: 2px;
+}
+
+.moonlit-prefs .ml-card {
+	border-radius: 14px;
+	border: 1px solid var(--ml-line);
+	background: var(--ml-card);
+	padding: 14px 16px 16px;
+}
+
+.moonlit-prefs .ml-card-title {
+	font-size: 13px;
+	font-weight: 650;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin-bottom: 3px;
+}
+
+.moonlit-prefs .ml-card-title::before {
+	content: "";
+	width: 3px;
+	height: 13px;
+	border-radius: 2px;
+	background: linear-gradient(180deg, var(--ml-amber), var(--ml-amber-deep));
+	flex: none;
+}
+
+.moonlit-prefs .ml-card-desc {
+	font-size: 11px;
+	color: var(--ml-ink-3);
+	line-height: 1.5;
+	margin-bottom: 12px;
+}
+
+.moonlit-prefs .ml-field {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 7px 0;
+	border-top: 1px solid var(--ml-line);
+}
+
+.moonlit-prefs .ml-field:first-of-type {
+	border-top: 0;
+}
+
+.moonlit-prefs .ml-label {
+	flex: 0 0 148px;
+	font-size: 12px;
+	font-weight: 550;
+	line-height: 1.4;
+}
+
+.moonlit-prefs .ml-label small {
+	display: block;
+	font-weight: 400;
+	font-size: 10.5px;
+	color: var(--ml-ink-3);
+	margin-top: 1px;
+}
+
+.moonlit-prefs .ml-control {
+	flex: 1 1 auto;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.moonlit-prefs input[type="text"],
+.moonlit-prefs input[type="password"],
+.moonlit-prefs input[type="number"],
+.moonlit-prefs select,
+.moonlit-prefs textarea {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 28px;
+	padding: 0 9px;
+	border-radius: 8px;
+	border: 1px solid var(--ml-line-strong);
+	background: var(--ml-bg);
+	color: var(--ml-ink);
+	font-family: var(--ml-font);
+	font-size: 12px;
+	outline: none;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.moonlit-prefs textarea {
+	height: auto;
+	min-height: 74px;
+	padding: 8px 9px;
+	line-height: 1.5;
+	resize: vertical;
+	font-size: 11.5px;
+}
+
+.moonlit-prefs input:focus,
+.moonlit-prefs select:focus,
+.moonlit-prefs textarea:focus {
+	border-color: var(--ml-amber-deep);
+	box-shadow: 0 0 0 3px var(--ml-amber-soft);
+}
+
+.moonlit-prefs button {
+	height: 28px;
+	padding: 0 12px;
+	border-radius: 8px;
+	border: 1px solid var(--ml-line-strong);
+	background: var(--ml-card);
+	color: var(--ml-ink);
+	font-family: var(--ml-font);
+	font-size: 11.5px;
+	font-weight: 550;
+	cursor: pointer;
+	transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.moonlit-prefs button:hover {
+	background: var(--ml-bg);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.moonlit-prefs button:active {
+	transform: scale(0.98);
+}
+
+.moonlit-prefs button.ml-primary {
+	background: linear-gradient(180deg, #ffd668, var(--ml-amber) 62%, #eeac0c);
+	border-color: rgba(170, 120, 5, 0.45);
+	color: #3b2a05;
+}
+
+.moonlit-prefs .ml-hint {
+	font-size: 10.5px;
+	color: var(--ml-ink-3);
+	line-height: 1.5;
+	margin-top: 8px;
+}
+
+.moonlit-prefs .ml-result {
+	font-size: 11.5px;
+	line-height: 1.5;
+	padding: 7px 10px;
+	border-radius: 8px;
+	margin-top: 8px;
+	display: none;
+}
+
+.moonlit-prefs .ml-result.ml-ok {
+	display: block;
+	background: rgba(55, 194, 109, 0.12);
+	color: #1f7a45;
+}
+
+.moonlit-prefs .ml-result.ml-bad {
+	display: block;
+	background: rgba(220, 76, 76, 0.12);
+	color: #a83232;
+}
+
+@media (prefers-color-scheme: dark) {
+	.moonlit-prefs .ml-result.ml-ok {
+		color: #7fe3a4;
+	}
+
+	.moonlit-prefs .ml-result.ml-bad {
+		color: #ff9a9a;
+	}
+}
+
+.moonlit-prefs .ml-inline-note {
+	font-size: 10.5px;
+	color: var(--ml-ink-3);
+}
+
+.moonlit-prefs .ml-row-inline {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}

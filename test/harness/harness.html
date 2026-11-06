@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Moonlit Reader — UI harness</title>
+<style>
+	/* Minimal stand-in for the Zotero reader chrome. */
+	:root {
+		color-scheme: light;
+		--material-toolbar: #f5f5f4;
+		--material-sidepane: #f8f8f7;
+		--fill-primary: #ffffff;
+	}
+	body {
+		margin: 0;
+		height: 100vh;
+		overflow: hidden;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+		background: #6f6f74;
+	}
+	body[data-theme="dark"] {
+		--material-toolbar: #2b2b30;
+		--material-sidepane: #1c1c21;
+		--fill-primary: #101014;
+		color-scheme: dark;
+		background: #0d0d10;
+	}
+	#split-view {
+		position: absolute;
+		inset: 0;
+		top: 41px;
+		display: flex;
+		overflow: hidden;
+	}
+	.toolbar {
+		position: absolute;
+		inset: 0 0 auto 0;
+		height: 41px;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 0 10px;
+		background: var(--material-toolbar);
+		border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+		z-index: 5;
+		box-sizing: border-box;
+	}
+	.toolbar .start,
+	.toolbar .end {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.toolbar .end {
+		margin-left: auto;
+	}
+	.toolbar .custom-sections {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+	.toolbar .fake-btn {
+		width: 26px;
+		height: 26px;
+		border-radius: 6px;
+		border: 0;
+		background: rgba(0, 0, 0, 0.06);
+		color: #444;
+		font-size: 12px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.primary-view {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	#viewerContainer {
+		flex: 1 1 auto;
+		overflow: auto;
+		padding: 16px 0 60px;
+	}
+	#viewer {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 14px;
+	}
+	.pdfViewer .page {
+		position: relative;
+		background: #fff;
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+		overflow: hidden;
+		flex: none;
+	}
+	body[data-theme="dark"] .pdfViewer .page {
+		background: #f7f7f7;
+	}
+	.pdfViewer .page .canvasWrapper {
+		position: absolute;
+		inset: 0;
+	}
+	.pdfViewer .page canvas {
+		display: block;
+	}
+	.pdfViewer .page .ml-paper-line {
+		position: absolute;
+		font-family: "Times New Roman", Times, serif;
+		color: #1a1a1a;
+		white-space: pre;
+		line-height: 1;
+		transform-origin: 0 0;
+		pointer-events: none;
+	}
+	/* The real reader resets buttons; reproduce it so plugin CSS is honest. */
+	.toolbar button {
+		all: unset;
+	}
+	.toolbar .fake-btn {
+		all: revert;
+		width: 26px;
+		height: 26px;
+		border-radius: 6px;
+		border: 0;
+		background: rgba(0, 0, 0, 0.06);
+		color: #444;
+		font-size: 12px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+	}
+</style>
+</head>
+<body>
+<div class="toolbar">
+	<div class="start">
+		<button class="fake-btn" title="sidebar">≡</button>
+		<button class="fake-btn" title="zoom out">−</button>
+		<button class="fake-btn" title="zoom in">+</button>
+	</div>
+	<div class="end">
+		<div class="custom-sections"></div>
+		<button class="fake-btn" title="rotate">↻</button>
+		<button class="fake-btn" title="more">⋯</button>
+	</div>
+</div>
+<div id="split-view">
+	<div class="primary-view">
+		<div id="viewerContainer">
+			<div id="viewer" class="pdfViewer"></div>
+		</div>
+	</div>
+</div>
+
+<script src="stub-zotero.js"></script>
+<script src="fixture.js"></script>
+<script src="../../content/scripts/i18n.js"></script>
+<script src="../../content/scripts/util.js"></script>
+<script src="../../content/scripts/layout.js"></script>
+<script src="../../content/scripts/sentences.js"></script>
+<script src="../../content/scripts/quotes.js"></script>
+<script src="../../content/scripts/markdown.js"></script>
+<script src="../../content/scripts/prompts.js"></script>
+<script src="../../content/scripts/ai.js"></script>
+<script src="../../content/scripts/mock.js"></script>
+<script src="../../content/scripts/cache.js"></script>
+  <script src="../../content/scripts/usage.js"></script>
+<script src="../../content/scripts/pdfdoc.js"></script>
+<script src="../../content/scripts/styles.js"></script>
+<script src="../../content/scripts/icons.js"></script>
+<script src="../../content/scripts/dom.js"></script>
+<script src="../../content/scripts/toast.js"></script>
+<script src="../../content/scripts/overlay.js"></script>
+<script src="../../content/scripts/annotations.js"></script>
+<script src="../../content/scripts/notes.js"></script>
+<script src="../../content/scripts/translate.js"></script>
+<script src="../../content/scripts/summary.js"></script>
+<script src="../../content/scripts/highlight.js"></script>
+<script src="../../content/scripts/dock.js"></script>
+<script src="../../content/scripts/reader-ui.js"></script>
+<script src="checks.js"></script>
+<script src="harness.js"></script>
+</body>
+</html>
