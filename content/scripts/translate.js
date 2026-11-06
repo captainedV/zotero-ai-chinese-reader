@@ -55,6 +55,7 @@
 		skippedNote.hidden = true;
 
 		let btnStop;
+		let btnClear;
 		let btnToggleSource;
 		let emptyState;
 
@@ -71,13 +72,58 @@
 				M.Prefs.set('showOriginalInTranslation', show);
 				applySourceVisibility();
 			});
-			toolbar.append(statusLabel, M.Dom.h(doc, 'div', { class: 'ml-grow' }), btnToggleSource);
+			// Clearing is per paper: this PDF's translations only.
+			btnClear = M.Dom.iconButton(doc, 'trash', t('action.clearTranslation'), () => {
+				if (!Object.keys(state.translations || {}).length && !state.translations?.size) {
+					return;
+				}
+				if (!btnClear.classList.contains('ml-armed')) {
+					btnClear.classList.add('ml-armed');
+					btnClear.title = t('action.confirmClear');
+					setTimeout(() => {
+						btnClear.classList.remove('ml-armed');
+						btnClear.title = t('action.clearTranslation');
+					}, 3200);
+					return;
+				}
+				btnClear.classList.remove('ml-armed');
+				btnClear.title = t('action.clearTranslation');
+				clearTranslation();
+			});
+			toolbar.append(statusLabel, M.Dom.h(doc, 'div', { class: 'ml-grow' }), btnClear, btnToggleSource);
 			updateToolbarState();
 		}
 
 		function updateToolbarState() {
 			btnStop.style.display = state.running ? 'inline-flex' : 'none';
 			btnToggleSource.style.display = state.segments.length ? 'inline-flex' : 'none';
+			const hasTranslation = state.translations && state.translations.size > 0;
+			btnClear.style.display = hasTranslation ? 'inline-flex' : 'none';
+		}
+
+		/**
+		 * Forget this paper's translations (screen + cache). The summary and the key
+		 * points belong to the same record but are deliberately left alone: the user
+		 * asked for them to be clearable one at a time.
+		 */
+		function clearTranslation() {
+			stop();
+			state.translations.clear();
+			if (state.record) {
+				state.record.translation = {};
+				M.Cache.save(state.record.attachmentKey, state.record);
+			}
+			for (const paragraph of state.segments) {
+				for (const segment of paragraph.sentences) {
+					segment.pending = false;
+				}
+			}
+			paintAll();
+			state.started = false;
+			updateProgress();
+			setProgress(0, state.segments.length, { state: 'idle' });
+			app.setTask('translate', null);
+			app.toast(t('action.translationCleared'));
 		}
 
 		function applySourceVisibility() {
@@ -1035,6 +1081,7 @@
 			},
 			start,
 			stop,
+			clearTranslation,
 			retranslate,
 			get batchStats() {
 				return state.batchStats || null;

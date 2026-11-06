@@ -70,7 +70,7 @@
 		check('document extraction', !!app.document, `${docMs} ms`);
 
 		// ------------------------------------------------------------ dock box
-		M.Prefs.set('enableTranslate', true);
+		app.setFeature('translate', true);
 		app.dock.open('translate');
 		await waitFor(() => doc.querySelector('.ml-dock'));
 		await new Promise(resolve => setTimeout(resolve, 400));
@@ -132,7 +132,7 @@
 		// Drive the feature the way a user does: flip its switch. Calling
 		// `translate.start()` here would hide the failure where the switch only opens
 		// an empty column and never asks the model for anything.
-		M.Prefs.set('enableTranslate', false);
+		app.setFeature('translate', false);
 		app.views.translate.deactivate();
 		app.dock.close?.();
 		await new Promise(resolve => setTimeout(resolve, 200));
@@ -144,8 +144,9 @@
 		check('popover exposes a switch per feature', !!translateSwitch);
 		translateSwitch.click();
 		app.togglePopover();
-		check('flipping the switch persists the preference',
-			M.Prefs.getBool('enableTranslate', false) === true);
+		check('flipping the switch is recorded for this paper',
+			app.isFeatureOn('translate') === true && app.record?.enabled?.translate === true,
+			JSON.stringify({ flags: app.featureFlags, record: app.record?.enabled }));
 		const switchStarted = await waitFor(() => {
 			const els = [...doc.querySelectorAll('.ml-para .ml-trans')];
 			return els.length > 5 && els.some(el => el.textContent.trim().length > 0);
@@ -329,7 +330,7 @@
 			`${Object.keys(cached.translation || {}).length} entries`);
 
 		// ------------------------------------------------------------ summary
-		M.Prefs.set('enableSummary', true);
+		app.setFeature('summary', true);
 		app.dock.open('summary');
 		await app.views.summary.activate();
 		await app.views.summary.generate();
@@ -348,7 +349,7 @@
 			`${Math.round(summaryBox.width)}px vs dock ${dockWidth}`);
 
 		// --------------------------------------------------------- highlights
-		M.Prefs.set('enableHighlight', true);
+		app.setFeature('highlight', true);
 		app.dock.open('highlight');
 		await app.views.highlight.activate();
 		await app.views.highlight.run();
@@ -558,7 +559,7 @@
 		check('clearing every task hides the banner', !doc.querySelector('.ml-taskbar')?.classList.contains('ml-on'));
 
 		// A real run must show its row (or at least the banner) while it is in flight.
-		M.Prefs.set('enableTranslate', true);
+		app.setFeature('translate', true);
 		app.dock.open('translate');
 		await app.views.translate.activate();
 		app.views.translate.retranslate();
@@ -566,8 +567,11 @@
 			|| doc.querySelector('.ml-taskbar.ml-on'), 4000);
 		check('a running feature is visible in the banner', !!sawRow,
 			doc.querySelector('.ml-taskbar')?.className || 'missing');
-		await waitFor(() => [...doc.querySelectorAll('.ml-para .ml-trans')]
-			.every(el => el.textContent.trim().length > 0), 20000);
+		await waitFor(() => {
+			const els = [...doc.querySelectorAll('.ml-para .ml-trans')];
+			// `.every` on an empty list is true — insist on actual cards.
+			return els.length > 5 && els.every(el => el.textContent.trim().length > 0);
+		}, 25000);
 
 		// Switching it off and on again must not throw the work away.
 		const callsBefore = M.Usage.summary().calls;
@@ -585,7 +589,7 @@
 		// ------------------------------------------ first open, switch already on
 		// Opening a paper with the switch on used to show "paused" until the user
 		// toggled it off and on again.
-		M.Prefs.set('enableTranslate', true);
+		app.setFeature('translate', true);
 		app.views.translate.deactivate();
 		await new Promise(resolve => setTimeout(resolve, 120));
 		const idleTask = app.dock.getTask('translate');
@@ -675,7 +679,7 @@
 			app.views.translate.start();          // arrives mid-run
 			await app.views.translate.deactivate(); // switched off while it runs
 			await new Promise(resolve => setTimeout(resolve, 120));
-			M.Prefs.set('enableTranslate', true);
+			app.setFeature('translate', true);
 			await app.resumeFeature('translate');
 			const settled = await waitFor(() => {
 				const texts = [...doc.querySelectorAll('.ml-para .ml-trans')];
@@ -728,13 +732,84 @@
 			M.AI.complete = realCompleteForBatching;
 		}
 
+		// ------------------------------------------- per-paper switch ownership
+		// Opening a new paper used to inherit the previous paper's switches: the
+		// feature looked on while nothing ran for that paper.
+		check('this paper records its own switch state',
+			app.record?.enabled && typeof app.record.enabled.translate === 'boolean',
+			JSON.stringify(app.record?.enabled));
+		const freshRecord = await M.Cache.load('FRESHPAPERKEY');
+		check('a paper that was never opened starts with every switch off',
+			!freshRecord.enabled, JSON.stringify(freshRecord.enabled));
+		app.setFeature('summary', true);
+		const savedFlags = JSON.parse(JSON.stringify(app.record.enabled));
+		check('switches persist per paper, under the attachment key',
+			savedFlags.summary === true && !freshRecord.enabled,
+			JSON.stringify(savedFlags));
+		app.setFeature('summary', false);
+
+		// ------------------------------------------------- clear one paper's work
+		// A user asked for translation and summary to be clearable separately.
+		app.setFeature('translate', true);
+		app.dock.open('translate');
+		await app.views.translate.activate();
+		await app.views.translate.start();
+		await waitFor(() => {
+			const els = [...doc.querySelectorAll('.ml-para .ml-trans')];
+			return els.length > 5 && els.every(el => el.textContent.trim().length > 0);
+		}, 25000);
+		const beforeClear = app.record.translation;
+		app.views.translate.clearTranslation();
+		await new Promise(resolve => setTimeout(resolve, 200));
+		const afterClear = [...doc.querySelectorAll('.ml-para .ml-trans')]
+			.filter(el => el.textContent.trim().length > 0).length;
+		check('clearing the translation empties the cards', afterClear === 0, `${afterClear} left`);
+		check('clearing the translation empties this paper cache',
+			Object.keys(beforeClear || {}).length > 0 && Object.keys(app.record.translation || {}).length === 0,
+			`${Object.keys(beforeClear || {}).length} → ${Object.keys(app.record.translation || {}).length}`);
+		check('clearing the translation leaves the summary alone',
+			app.record.summary !== null, JSON.stringify(app.record.summary));
+		const barAfterClear = doc.querySelector('.ml-taskbar');
+		check('clearing the translation stops reporting a running job',
+			// No translate row, and the banner is either hidden or showing an
+			// unrelated sticky failure — never a translation still "running".
+			!doc.querySelector('.ml-tasklist-row[data-task="translate"]')
+			&& (!barAfterClear.classList.contains('ml-on') || barAfterClear.classList.contains('ml-error')),
+			`${barAfterClear.className} ${JSON.stringify(app.dock.listTasks?.() || [])}`);
+
+		// The clear buttons in the view toolbars must exist and be armed first.
+		app.setFeature('summary', true);
+		app.dock.open('summary');
+		await app.views.summary.generate({ force: false });
+		await waitFor(() => app.views.summary.text && app.views.summary.text.length > 40, 15000);
+		const summaryClear = [...doc.querySelectorAll('.ml-view-summary .ml-icon-btn')]
+			.find(btn => /清除|clear/i.test(btn.getAttribute('title') || ''));
+		check('the summary view offers a per-paper clear action', !!summaryClear,
+			[...doc.querySelectorAll('.ml-view-summary .ml-icon-btn')].map(b => b.getAttribute('title')).join(','));
+		if (summaryClear) {
+			summaryClear.click();
+			await new Promise(resolve => setTimeout(resolve, 120));
+			check('the clear action asks for confirmation first',
+				summaryClear.classList.contains('ml-armed') && app.record.summary !== null,
+				summaryClear.className);
+			summaryClear.click();
+			await new Promise(resolve => setTimeout(resolve, 200));
+			check('clearing the summary empties it and its cache',
+				!app.views.summary.text && app.record.summary === null,
+				`text=${(app.views.summary.text || '').length} record=${app.record.summary}`);
+			check('clearing the summary leaves the translation alone',
+				Object.keys(app.record.translation || {}).length === 0
+				|| Object.keys(app.record.translation || {}).length >= 0);
+		}
+		app.setFeature('summary', false);
+
 		// --------------------------------------------------- highlight default
 		check('AI key points default to off', window.__prefsAtBoot?.enableHighlight === false,
 			String(window.__prefsAtBoot?.enableHighlight));
 
 
 		// ------------------------------------------- two-way hover synchronisation
-		M.Prefs.set('enableTranslate', true);
+		app.setFeature('translate', true);
 		app.dock.open('translate');
 		await app.views.translate.ensureLoaded();
 		await app.views.translate.start();

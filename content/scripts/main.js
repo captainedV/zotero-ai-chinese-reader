@@ -24,10 +24,10 @@
 				// A different language/model invalidates cached AI output, so kick
 				// the affected feature instead of leaving stale results on screen.
 				if (changedKey && RESULT_KEYS.has(changedKey)) {
-					if (M.Prefs.getBool('enableSummary', false)) {
+					if (app?.isFeatureOn?.('summary')) {
 						app?.views?.summary?.generate?.({ force: true });
 					}
-					if (M.Prefs.getBool('enableTranslate', false)) {
+					if (app?.isFeatureOn?.('translate')) {
 						app?.views?.translate?.retranslate?.();
 					}
 				}
@@ -296,6 +296,18 @@
 
 			await registerPane();
 			wireReaderEvents();
+
+			// The preferences pane runs in its own sandbox (no IOUtils, no plugin
+			// globals), so file work is delegated back to the plugin through Zotero.
+			try {
+				Zotero.__moonlitBridge = {
+					version: M.version,
+					clearCache: () => M.Cache.clearAll()
+				};
+			}
+			catch (e) {
+				M.Log.debug('bridge registration failed', e);
+			}
 
 			// Toggles are shared between the popover and the pref pane.
 			for (const key of ['debug', 'targetLang', 'granularity', 'apiKey', 'provider', 'model', 'baseURL']) {

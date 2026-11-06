@@ -690,6 +690,18 @@ button.ml-tab .ml-tab-count {
   overflow: hidden;
 }
 
+/* The clear buttons ask for a second click before destroying work. */
+.ml-icon-btn.ml-armed {
+  color: var(--ml-red, #d93025);
+  background: color-mix(in srgb, var(--ml-red, #d93025) 12%, transparent);
+  animation: ml-armed-pulse 0.9s var(--ml-ease) infinite alternate;
+}
+
+@keyframes ml-armed-pulse {
+  from { opacity: 0.72; }
+  to { opacity: 1; }
+}
+
 .ml-skipped {
   margin-top: 10px;
   padding: 8px 10px;

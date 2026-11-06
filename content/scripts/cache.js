@@ -130,5 +130,37 @@
 		}
 	}
 
-	M.Cache = { VERSION, load, save, flush, clear, emptyRecord, pathFor };
+	/**
+	 * Remove every cached paper. The preferences pane cannot touch files itself (its
+	 * sandbox refuses `importESModule`, which is the "IOUtils.sys.mjs" error users
+	 * saw), so it calls this through `Zotero.__moonlitBridge`.
+	 */
+	async function clearAll() {
+		memory.clear();
+		for (const timer of pending.values()) {
+			clearTimeout(timer);
+		}
+		pending.clear();
+		let removed = 0;
+		try {
+			const dir = M.Paths.dataDir();
+			const children = await IOUtils.getChildren(dir).catch(() => []);
+			for (const child of children) {
+				const name = String(child).split(/[\\/]/).pop() || '';
+				if (!name.endsWith('.json') || name === 'config.json') {
+					// Keep the settings backup: it is what restores the API key.
+					continue;
+				}
+				await IOUtils.remove(child, { ignoreAbsent: true }).catch(() => {});
+				removed++;
+			}
+		}
+		catch (e) {
+			M.Log.debug('cache clearAll failed', e);
+		}
+		M.Log.info('cache cleared', { files: removed });
+		return removed;
+	}
+
+	M.Cache = { VERSION, load, save, flush, clear, clearAll, emptyRecord, pathFor };
 })();

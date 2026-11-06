@@ -38,6 +38,7 @@
 
 		let btnCopy;
 		let btnNote;
+		let btnClear;
 
 		function buildToolbar() {
 			btnCopy = M.Dom.iconButton(doc, 'copy', t('action.copy'), () => {
@@ -71,8 +72,41 @@
 				}
 				btnNote.disabled = false;
 			});
-			toolbar.append(statusLabel, M.Dom.h(doc, 'div', { class: 'ml-grow' }), btnNote, btnCopy);
+			// Clearing is per paper: the summary of this PDF only.
+			btnClear = M.Dom.iconButton(doc, 'trash', t('action.clearSummary'), () => {
+				if (!state.text) {
+					return;
+				}
+				if (!btnClear.classList.contains('ml-armed')) {
+					btnClear.classList.add('ml-armed');
+					btnClear.title = t('action.confirmClear');
+					setTimeout(() => {
+						btnClear.classList.remove('ml-armed');
+						btnClear.title = t('action.clearSummary');
+					}, 3200);
+					return;
+				}
+				btnClear.classList.remove('ml-armed');
+				btnClear.title = t('action.clearSummary');
+				clearSummary();
+			});
+			toolbar.append(statusLabel, M.Dom.h(doc, 'div', { class: 'ml-grow' }), btnClear, btnNote, btnCopy);
 			syncToolbar();
+		}
+
+		/** Drop this paper's summary (screen + cache), leaving translation alone. */
+		function clearSummary() {
+			state.text = '';
+			state.nonStream = false;
+			if (state.record) {
+				state.record.summary = null;
+				M.Cache.save(state.record.attachmentKey, state.record);
+			}
+			paint();
+			syncToolbar();
+			renderMeta();
+			app.setTask('summary', null);
+			app.toast(t('action.summaryCleared'));
 		}
 
 		/** Key points from the highlight view, shaped for the note exporter. */
@@ -88,6 +122,7 @@
 
 		function syncToolbar() {
 			btnCopy.style.display = state.text ? 'inline-flex' : 'none';
+			btnClear.style.display = state.text ? 'inline-flex' : 'none';
 			btnNote.style.display = (state.text || pointsForNote().length) ? 'inline-flex' : 'none';
 		}
 
@@ -373,6 +408,10 @@
 				}
 			},
 			generate,
+			clearSummary,
+			get text() {
+				return state.text;
+			},
 			refresh() {
 				renderMeta();
 				syncToolbar();

@@ -506,6 +506,9 @@
 			const tasks = [...state.tasks.values()].filter(task => task.state !== 'idle');
 			if (!tasks.length) {
 				taskList.hidden = true;
+				// Drop the rows too: leaving them in the DOM makes every "is this job
+				// gone?" query lie.
+				M.Dom.clear(taskList);
 				progress.classList.remove('ml-on');
 				progress.classList.remove('ml-indeterminate');
 				progressFill.style.width = '0%';

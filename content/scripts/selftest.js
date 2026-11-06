@@ -81,12 +81,14 @@
 
 	async function run() {
 		log('starting');
+		/** The reader app under test; also used by the restore block below. */
+		let app = null;
 
 		const restore = {
 			provider: M.Prefs.getString('provider', 'deepseek'),
-			enableTranslate: M.Prefs.getBool('enableTranslate', false),
-			enableSummary: M.Prefs.getBool('enableSummary', false),
-			enableHighlight: M.Prefs.getBool('enableHighlight', false),
+			enableTranslate: false,
+			enableSummary: false,
+			enableHighlight: false,
 			granularity: M.Prefs.getString('granularity', 'sentence'),
 			targetLang: M.Prefs.getString('targetLang', 'zh-CN')
 		};
@@ -112,7 +114,12 @@
 				return finish();
 			}
 
-			const app = await M.ReaderUI.attach(reader);
+			app = await M.ReaderUI.attach(reader);
+			Object.assign(restore, {
+				enableTranslate: app.isFeatureOn('translate'),
+				enableSummary: app.isFeatureOn('summary'),
+				enableHighlight: app.isFeatureOn('highlight')
+			});
 			if (!assertStep('plugin attached to reader', !!app)) {
 				return finish();
 			}
@@ -178,7 +185,7 @@
 
 			// Dock + translation, driven through the switch exactly like a user does:
 			// if the switch only opens an empty column, this step must fail.
-			M.Prefs.set('enableTranslate', false);
+			app.setFeature('translate', false);
 			await app.views.translate.ensureLoaded();
 			app.dock.open('translate');
 			const dock = await waitFor(() => doc.querySelector('.ml-dock'), 5000);
@@ -189,7 +196,7 @@
 			assertStep('translation cards rendered', !!cards, `cards=${doc.querySelectorAll('.ml-para').length}`);
 
 			await app.applyFeatureState('enableTranslate', true);
-			assertStep('translation switch persists', M.Prefs.getBool('enableTranslate', false) === true);
+			assertStep('translation switch persists', app.isFeatureOn('translate') === true);
 			const switchRan = await waitFor(() => {
 				const els = Array.from(doc.querySelectorAll('.ml-para .ml-trans'));
 				return els.length > 2 && els.some(el => el.textContent.trim().length > 0);
@@ -290,7 +297,7 @@
 				const pausedOk = !paused || paused.state === 'paused' || paused.state === 'running';
 				assertStep('an interrupted feature never reports a wrong state', pausedOk,
 					JSON.stringify(paused));
-				M.Prefs.set('enableTranslate', true);
+				app.setFeature('translate', true);
 				await app.resumeFeature('translate');
 				const resumed = await waitFor(() => {
 					const current = app.dock.getTask?.('translate');
@@ -313,7 +320,7 @@
 			}
 
 			// Summary — same rule: the switch has to do the work.
-			M.Prefs.set('enableSummary', false);
+			app.setFeature('summary', false);
 			app.dock.open('summary');
 			await app.views.summary.activate();
 			await app.applyFeatureState('enableSummary', true);
@@ -327,7 +334,7 @@
 				!!summaryText?.querySelector('h2, h3') || /一句话总结/.test(summaryText?.textContent || ''));
 
 			// Highlights — the switch is the entry point here too.
-			M.Prefs.set('enableHighlight', false);
+			app.setFeature('highlight', false);
 			app.dock.open('highlight');
 			await app.views.highlight.activate();
 			await app.applyFeatureState('enableHighlight', true);
@@ -542,7 +549,7 @@
 
 			// ---- hover sync: translation -> original (highlight + scroll)
 			try {
-				M.Prefs.set('enableTranslate', true);
+				app.setFeature('translate', true);
 				app.dock.open('translate');
 				await app.views.translate.ensureLoaded();
 				await waitFor(() => doc.querySelectorAll('.ml-seg').length > 6, 9000);
@@ -703,6 +710,36 @@
 			const record = await M.Cache.load(document_.attachmentKey);
 			assertStep('translation cached to disk', Object.keys(record.translation || {}).length > 0,
 				`entries=${Object.keys(record.translation || {}).length}`);
+
+			// Per-paper switch ownership and per-paper clearing.
+			try {
+				const key = app.document?.attachmentKey;
+				const paperRecord = await M.Cache.load(key);
+				assertStep('switch state is stored with the paper', !!paperRecord.enabled,
+					JSON.stringify(paperRecord.enabled || null));
+				const fresh = await M.Cache.load(`selftest-fresh-${Date.now()}`);
+				assertStep('a paper that was never opened has every switch off',
+					!fresh.enabled, JSON.stringify(fresh.enabled || null));
+				// Clearing this paper's translation must not touch the summary or the
+				// key points, and must empty the cache entry for translation only.
+				app.setFeature('summary', true);
+				const summaryBefore = app.record?.summary?.text || '';
+				app.views.translate.clearTranslation();
+				await M.Util.sleep(260);
+				const left = Array.from(doc.querySelectorAll('.ml-para .ml-trans'))
+					.filter(el => el.textContent.trim().length > 0).length;
+				assertStep('clearing the translation empties the column', left === 0, `${left} left`);
+				assertStep('clearing the translation empties its cache entry',
+					Object.keys(app.record?.translation || {}).length === 0,
+					`${Object.keys(app.record?.translation || {}).length} entries`);
+				assertStep('clearing the translation keeps the summary',
+					(app.record?.summary?.text || '') === summaryBefore,
+					`${(app.record?.summary?.text || '').length} chars`);
+			}
+			catch (e) {
+				assertStep('clearing the translation empties the column', false, e.message);
+			}
+
 			assertStep('summary cached to disk', !!record.summary?.text);
 		}
 		catch (e) {
@@ -711,9 +748,11 @@
 		}
 		finally {
 			M.Prefs.set('provider', restore.provider);
-			M.Prefs.set('enableTranslate', restore.enableTranslate);
-			M.Prefs.set('enableSummary', restore.enableSummary);
-			M.Prefs.set('enableHighlight', restore.enableHighlight);
+			if (app) {
+				app.setFeature('translate', restore.enableTranslate);
+				app.setFeature('summary', restore.enableSummary);
+				app.setFeature('highlight', restore.enableHighlight);
+			}
 			M.Prefs.set('granularity', restore.granularity);
 			M.Prefs.set('targetLang', restore.targetLang);
 		}

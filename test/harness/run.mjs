@@ -83,5 +83,7 @@ for (const scenario of list) {
 }
 
 await browser.close();
-console.log(errors.length ? `\n${errors.length} page errors` : '\nno page errors');
+console.log(errors.length
+	? `\n${errors.length} page errors: ${errors.map(e => `${e.scenario}: ${e.error}`).join(' | ')}`
+	: '\nno page errors');
 process.exit(errors.length ? 1 : 0);

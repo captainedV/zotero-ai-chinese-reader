@@ -85,8 +85,7 @@
 		const features = M.Dom.h(doc, 'div');
 		features.appendChild(M.Dom.h(doc, 'div', { class: 'ml-section-label', text: t('section.features') }));
 		for (const row of rows) {
-			const sw = M.Dom.switchControl(doc, M.Prefs.getBool(row.key, false), async (value) => {
-				M.Prefs.set(row.key, value);
+			const sw = M.Dom.switchControl(doc, app.isFeatureOn(FEATURE_BY_KEY[row.key] || 'translate'), async (value) => {
 				await app.applyFeatureState(row.key, value);
 			});
 			features.appendChild(M.Dom.h(doc, 'div', { class: 'ml-row' }, [
@@ -312,6 +311,66 @@
 		}, 900);
 		M.Usage.onChange(() => app.saveUsage());
 
+		/**
+		 * Feature switches are per paper, not global.
+		 *
+		 * Keeping them in one pref meant the next paper opened with the previous
+		 * paper's switches already on — nothing had run for that paper, so the user
+		 * had to toggle off and on to make it work. Each paper stores its own three
+		 * flags in its cache record; a paper that has never been used starts off.
+		 */
+		app.featureFlags = { translate: false, summary: false, highlight: false };
+
+		app.isFeatureOn = name => !!app.featureFlags?.[name];
+
+		app.anyFeatureOn = () => Object.values(app.featureFlags || {}).some(Boolean);
+
+		app.loadFeatureFlags = async () => {
+			let flags = { translate: false, summary: false, highlight: false };
+			try {
+				const attachment = Zotero.Items.get(reader.itemID);
+				const key = attachment?.key || `${reader.itemID}`;
+				app.recordKey = key;
+				const record = await M.Cache.load(key);
+				app.record = record;
+				if (record?.enabled) {
+					flags = {
+						translate: !!record.enabled.translate,
+						summary: !!record.enabled.summary,
+						highlight: !!record.enabled.highlight
+					};
+				}
+			}
+			catch (e) {
+				M.Log.debug('feature flags load failed', e);
+			}
+			app.featureFlags = flags;
+			return flags;
+		};
+
+		app.saveFeatureFlags = async () => {
+			try {
+				const key = app.document?.attachmentKey || app.recordKey;
+				if (!key) {
+					return;
+				}
+				const record = app.record || await M.Cache.load(key);
+				record.enabled = { ...app.featureFlags };
+				app.record = record;
+				M.Cache.save(key, record);
+			}
+			catch (e) {
+				M.Log.debug('feature flags save failed', e);
+			}
+		};
+
+		/** Set one paper's switch without running anything (tests, restore). */
+		app.setFeature = (name, value) => {
+			app.featureFlags = { ...(app.featureFlags || {}), [name]: !!value };
+			app.setButtonState?.();
+			app.saveFeatureFlags();
+		};
+
 		app.applyFeatureState = async (key, value) => {
 			const map = {
 				enableTranslate: { tab: 'translate', view: app.views.translate },
@@ -322,6 +381,8 @@
 			if (!entry) {
 				return;
 			}
+			const featureName = FEATURE_BY_KEY[key] || entry.tab;
+			app.setFeature(featureName, !!value);
 			if (value) {
 				// Turning a switch on is the entry point for the feature, so it has to
 				// start the work: opening an empty tab and waiting for a second click is
@@ -331,10 +392,7 @@
 			}
 			else {
 				entry.view?.deactivate?.();
-				const anyOn = M.Prefs.getBool('enableTranslate', false)
-					|| M.Prefs.getBool('enableSummary', false)
-					|| M.Prefs.getBool('enableHighlight', false);
-				if (!anyOn) {
+				if (!app.anyFeatureOn()) {
 					app.dock.close();
 				}
 				app.setButtonState();
@@ -343,20 +401,20 @@
 
 		app.runFeature = async (name) => {
 			if (name === 'summary') {
-				M.Prefs.set('enableSummary', true);
+				app.setFeature('summary', true);
 				app.dock.open('summary');
 				// A cached summary for the same language is reused; `force` stays off so
 				// flipping the switch does not burn tokens again.
 				await app.views.summary.generate({ force: false });
 			}
 			else if (name === 'translate') {
-				M.Prefs.set('enableTranslate', true);
+				app.setFeature('translate', true);
 				app.dock.open('translate');
 				await app.views.translate.activate();
 				app.views.translate.start();
 			}
 			else if (name === 'highlight') {
-				M.Prefs.set('enableHighlight', true);
+				app.setFeature('highlight', true);
 				app.dock.open('highlight');
 				await app.views.highlight.activate();
 				if (!app.views.highlight.points?.length) {
@@ -373,14 +431,14 @@
 		 */
 		app.resumeFeature = async (tab) => {
 			try {
-				if (tab === 'translate' && M.Prefs.getBool('enableTranslate', false)) {
+				if (tab === 'translate' && app.isFeatureOn('translate')) {
 					await app.views.translate.activate();
 					app.views.translate.start();
 				}
-				else if (tab === 'summary' && M.Prefs.getBool('enableSummary', false)) {
+				else if (tab === 'summary' && app.isFeatureOn('summary')) {
 					await app.views.summary.generate({ force: false });
 				}
-				else if (tab === 'highlight' && M.Prefs.getBool('enableHighlight', false)) {
+				else if (tab === 'highlight' && app.isFeatureOn('highlight')) {
 					await app.views.highlight.activate();
 					// Never re-run on every open: only when nothing was cached.
 					if (!app.views.highlight.points?.length) {
@@ -411,9 +469,7 @@
 			if (!button) {
 				return;
 			}
-			const anyOn = M.Prefs.getBool('enableTranslate', false)
-				|| M.Prefs.getBool('enableSummary', false)
-				|| M.Prefs.getBool('enableHighlight', false);
+			const anyOn = app.anyFeatureOn();
 			button.classList.toggle('ml-on', anyOn);
 			button.classList.toggle('ml-busy', app.busyCount > 0);
 			button.classList.toggle('ml-open', !!doc.getElementById(POPOVER_ID));
@@ -584,14 +640,15 @@
 			catch (e) {
 				// ignore
 			}
-			const anyOn = M.Prefs.getBool('enableTranslate', false)
-				|| M.Prefs.getBool('enableSummary', false)
-				|| M.Prefs.getBool('enableHighlight', false);
-			if (anyOn) {
-				const tab = M.Prefs.getString('dockTab', 'summary');
+			await app.loadFeatureFlags();
+			app.setButtonState();
+			if (app.anyFeatureOn()) {
+				const tab = app.isFeatureOn(M.Prefs.getString('dockTab', 'summary'))
+					? M.Prefs.getString('dockTab', 'summary')
+					: ['translate', 'summary', 'highlight'].find(name => app.isFeatureOn(name));
 				app.dock.open(tab);
-				// The switch is still on, so the feature has to keep working after the
-				// reader was reopened: resume it instead of showing an empty column.
+				// Only resume what this paper had switched on; a paper that has never
+				// been translated opens with the switches off.
 				app.resumeFeature(tab);
 			}
 
@@ -652,6 +709,13 @@
 			ensureToolbarButton(app);
 		}
 	}
+
+	/** Pref-style switch key → feature name used by the per-paper flags. */
+	const FEATURE_BY_KEY = {
+		enableTranslate: 'translate',
+		enableSummary: 'summary',
+		enableHighlight: 'highlight'
+	};
 
 	M.ReaderUI = {
 		attach,

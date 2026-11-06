@@ -459,24 +459,25 @@ var MoonlitPreferences = {
 				clearButton.disabled = true;
 				output.textContent = this.t('正在清理…', 'Clearing…');
 				try {
-					const io = ChromeUtils.importESModule('resource://gre/modules/IOUtils.sys.mjs').IOUtils;
-					const paths = ChromeUtils.importESModule('resource://gre/modules/PathUtils.sys.mjs').PathUtils;
-					const dir = paths.join(Zotero.DataDirectory.dir, 'moonlit');
-					const children = await io.getChildren(dir).catch(() => []);
-					for (const child of children) {
-						await io.remove(child, { recursive: true, ignoreAbsent: true });
+					// This pane has no IOUtils (importESModule is refused inside the
+					// preferences sandbox), so the plugin does the file work.
+					const bridge = Zotero.__moonlitBridge;
+					if (!bridge?.clearCache) {
+						throw new Error(this.t('插件尚未加载完成，请重启 Zotero 后再试。',
+							'The plugin is not fully loaded yet — restart Zotero and try again.'));
 					}
-					output.textContent = this.t(`已清理 ${children.length} 个缓存文件。`, `Removed ${children.length} cache files.`);
+					const removed = await bridge.clearCache();
+					output.textContent = this.t(`已清理 ${removed} 个缓存文件。`, `Removed ${removed} cache files.`);
 				}
 				catch (e) {
-					output.textContent = String(e);
+					output.textContent = e?.message || String(e);
 				}
 				clearButton.disabled = false;
 			}
 		});
 		const card = this.el('div', { class: 'ml-card' }, [
 			this.el('div', { class: 'ml-card-title', text: this.t('缓存与数据', 'Cache & data') }),
-			this.el('div', { class: 'ml-card-desc', text: this.t('译文、总结与标注结果会缓存到 Zotero 数据目录下的 moonlit 文件夹，重新打开论文时无需再次请求 AI。', 'Translations, summaries and highlights are cached under the moonlit folder in your Zotero data directory, so reopening a paper is instant.') }),
+			this.el('div', { class: 'ml-card-desc', text: this.t('译文、总结与标注结果会缓存到 Zotero 数据目录下的 moonlit 文件夹，重新打开论文时无需再次请求 AI。想只清某一篇论文的译文或总结，用右栏对应标签上的垃圾桶按钮（连点两次确认）。', 'Translations, summaries and highlights are cached under the moonlit folder in your Zotero data directory, so reopening a paper is instant. To clear just one paper, use the bin button in the matching dock tab (click twice to confirm).') }),
 			this.el('div', { class: 'ml-row-inline' }, [clearButton, output])
 		]);
 		this.root.appendChild(card);
