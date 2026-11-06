@@ -690,6 +690,44 @@
 			M.AI.complete = realComplete;
 		}
 
+		// -------------------------------- batched, context-aware translation
+		// One request per paragraph wasted the context window and paid a round trip
+		// per paragraph; consecutive paragraphs must share a request instead.
+		const completeCalls = [];
+		const realCompleteForBatching = M.AI.complete;
+		M.AI.complete = async (options) => {
+			completeCalls.push(options);
+			return realCompleteForBatching(options);
+		};
+		try {
+			M.Prefs.set('translate', true);
+			M.Prefs.set('batchChars', 2200);
+			M.Prefs.set('batchUnits', 6);
+			app.views.translate.retranslate();
+			await waitFor(() => {
+				const texts = [...doc.querySelectorAll('.ml-para .ml-trans')];
+				return texts.length > 5 && texts.every(el => el.textContent.trim().length > 0);
+			}, 30000);
+			const translateCalls = completeCalls.filter(call => call.kind === 'translate');
+			const paragraphs = doc.querySelectorAll('.ml-para').length;
+			check('translation batches several paragraphs per request',
+				translateCalls.length > 0 && translateCalls.length <= Math.ceil(paragraphs / 2),
+				`${translateCalls.length} requests for ${paragraphs} paragraphs`);
+			const withContext = translateCalls.filter(call => /Current section:|Preceding paragraph \(context only/.test(call.prompt));
+			check('each batch carries its surroundings as context',
+				withContext.length >= Math.max(1, translateCalls.length - 1),
+				`${withContext.length}/${translateCalls.length}`);
+			const idCounts = translateCalls.map(call => {
+				const match = call.prompt.match(/Items to translate \((\d+)/);
+				return match ? Number(match[1]) : 0;
+			});
+			check('batches respect the item cap', idCounts.every(count => count >= 1 && count <= 6),
+				idCounts.join(','));
+		}
+		finally {
+			M.AI.complete = realCompleteForBatching;
+		}
+
 		// --------------------------------------------------- highlight default
 		check('AI key points default to off', window.__prefsAtBoot?.enableHighlight === false,
 			String(window.__prefsAtBoot?.enableHighlight));

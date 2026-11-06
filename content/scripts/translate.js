@@ -518,6 +518,8 @@
 		}
 
 		function updateProgress() {
+			// Count the units the user can actually see change: paragraphs in
+			// paragraph mode, sentences in sentence mode.
 			const total = state.segments.length;
 			const done = state.segments.filter(paragraph =>
 				paragraph.sentences.every(segment => state.translations.get(segment.id))).length;
@@ -526,22 +528,70 @@
 		}
 
 		// ------------------------------------------------------------ translate
-		function batchRequests(paragraph) {
-			const pending = paragraph.sentences.filter(segment => !state.translations.get(segment.id));
-			if (!pending.length) {
-				return [];
+		/** Every translatable unit of the paper, in reading order. */
+		function unitsInOrder() {
+			const out = [];
+			for (const paragraph of state.segments) {
+				for (const segment of paragraph.sentences) {
+					out.push({
+						id: segment.id,
+						text: segment.text,
+						segment,
+						paragraph,
+						paragraphId: paragraph.id
+					});
+				}
 			}
+			return out;
+		}
+
+		function pendingUnits() {
+			return unitsInOrder().filter(unit => !state.translations.get(unit.id));
+		}
+
+		/** Nearest section heading above a paragraph: the model needs the topic. */
+		function sectionFor(paragraph) {
+			const paragraphs = app.document?.paragraphs || [];
+			const index = paragraphs.indexOf(paragraph);
+			if (index < 0) {
+				return '';
+			}
+			for (let i = index; i >= 0; i--) {
+				const candidate = paragraphs[i];
+				if (candidate.role === 'heading' || candidate.role === 'title') {
+					return candidate.text.trim();
+				}
+			}
+			return '';
+		}
+
+		/**
+		 * Group pending units into requests.
+		 *
+		 * One request per paragraph is wasteful in both directions: the model sees
+		 * no neighbouring text (so terminology drifts and pronouns lose their
+		 * referent) and every paragraph costs a full round trip plus system prompt.
+		 * Consecutive paragraphs are packed up to a character budget instead.
+		 */
+		function buildBatches(pending) {
+			const maxChars = Math.max(400, Math.min(8000, M.Prefs.getInt('batchChars', 2200)));
+			const maxUnits = Math.max(1, Math.min(20, M.Prefs.getInt('batchUnits', 6)));
 			const batches = [];
 			let current = [];
 			let size = 0;
-			for (const segment of pending) {
-				if (current.length && size + segment.text.length > MAX_CHARS_PER_REQUEST) {
+			for (const unit of pending) {
+				// Never mix two paragraphs whose gap in the document is large: the
+				// context would be misleading.
+				const previous = current[current.length - 1];
+				const sameRun = !previous
+					|| state.segments.indexOf(unit.paragraph) - state.segments.indexOf(previous.paragraph) <= 1;
+				if (current.length && (!sameRun || current.length >= maxUnits || size + unit.text.length > maxChars)) {
 					batches.push(current);
 					current = [];
 					size = 0;
 				}
-				current.push(segment);
-				size += segment.text.length;
+				current.push(unit);
+				size += unit.text.length;
 			}
 			if (current.length) {
 				batches.push(current);
@@ -549,98 +599,110 @@
 			return batches;
 		}
 
-		async function translateParagraph(paragraph, signal) {
-			const batches = batchRequests(paragraph);
-			for (const batch of batches) {
-				if (signal.aborted) {
-					return;
-				}
-				for (const segment of batch) {
-					segment.pending = true;
-					paintSegment(segment);
-				}
-				const granularity = M.Prefs.getString('granularity', 'paragraph') || 'paragraph';
-				const request = granularity === 'paragraph'
-					? M.Prompts.buildTranslateParagraphPrompt({
-						paragraphText: paragraph.text,
-						index: paragraph.pageIndex,
-						total: state.segments.length
-					})
-					: M.Prompts.buildTranslatePrompt({
-						sentences: batch.map(segment => ({ id: segment.id, text: segment.text })),
-						paragraphText: paragraph.text,
-						index: paragraph.pageIndex,
-						total: state.segments.length
-					});
-				let raw;
-				try {
-					raw = await M.AI.complete({
-						kind: 'translate',
-						system: request.system,
-						prompt: request.prompt,
-						json: request.json,
-						signal,
-						onState: (next, info) => {
-							if (next === 'rateLimited') {
-								const current = state.progress;
-								if (current) {
-									app.setTask('translate', {
-										state: 'running',
-										label: t('progress.rateLimited', { seconds: info?.seconds ?? 3 }),
-										done: current.done,
-										total: current.total,
-										tab: 'translate'
-									});
-								}
-								return;
+		/** Context block for one batch: title, section, the paragraphs around it. */
+		function contextFor(batch) {
+			const first = batch[0];
+			const last = batch[batch.length - 1];
+			const segments = state.segments;
+			const firstIndex = segments.indexOf(first.paragraph);
+			const lastIndex = segments.indexOf(last.paragraph);
+			const titleParagraph = (app.document?.paragraphs || []).find(paragraph => paragraph.role === 'title');
+			const meta = app.document?.meta?.title;
+			return {
+				title: titleParagraph?.text || meta || '',
+				section: sectionFor(first.paragraph),
+				before: segments[firstIndex - 1]?.text || '',
+				after: segments[lastIndex + 1]?.text || ''
+			};
+		}
+
+		/** Send one batch; returns how many units it filled. */
+		async function translateBatch(batch, signal) {
+			for (const unit of batch) {
+				unit.segment.pending = true;
+				paintSegment(unit.segment);
+			}
+			const request = M.Prompts.buildTranslateBatchPrompt({
+				units: batch.map(unit => ({ id: unit.id, text: unit.text })),
+				context: contextFor(batch),
+				contextChars: M.Prefs.getInt('contextChars', 900)
+			});
+			let raw;
+			try {
+				raw = await M.AI.complete({
+					kind: 'translate',
+					system: request.system,
+					prompt: request.prompt,
+					json: request.json,
+					signal,
+					onState: (next, info) => {
+						if (next === 'rateLimited') {
+							const current = state.progress;
+							if (current) {
+								app.setTask('translate', {
+									state: 'running',
+									label: t('progress.rateLimited', { seconds: info?.seconds ?? 3 }),
+									done: current.done,
+									total: current.total,
+									tab: 'translate'
+								});
 							}
-							if (next === 'fallback') {
-								state.nonStream = true;
-								state.progressLabel = progressLabel(state.progress?.done || 0);
-								const current = state.progress;
-								if (current) {
-									app.setTask('translate', {
-										state: 'running',
-										label: state.progressLabel,
-										done: current.done,
-										total: current.total,
-										tab: 'translate'
-									});
-								}
+							return;
+						}
+						if (next === 'fallback') {
+							state.nonStream = true;
+							state.progressLabel = progressLabel(state.progress?.done || 0);
+							const current = state.progress;
+							if (current) {
+								app.setTask('translate', {
+									state: 'running',
+									label: state.progressLabel,
+									done: current.done,
+									total: current.total,
+									tab: 'translate'
+								});
 							}
 						}
-					});
+					}
+				});
+			}
+			catch (e) {
+				for (const unit of batch) {
+					unit.segment.pending = false;
+					paintSegment(unit.segment);
 				}
-				catch (e) {
-					for (const segment of batch) {
-						segment.pending = false;
-						paintSegment(segment);
-					}
-					if (e.code === 'aborted') {
-						return;
-					}
-					throw e;
+				if (e.code === 'aborted') {
+					return 0;
 				}
-				const parsed = M.AI.parseJson(raw);
-				const translations = Array.isArray(parsed?.translations) ? parsed.translations : [];
-				if (granularity === 'paragraph' || !translations.length) {
-					const text = (translations[0]?.text || raw || '').trim();
-					for (const segment of batch) {
-						state.translations.set(segment.id, text);
-						segment.pending = false;
-						paintSegment(segment);
-					}
+				throw e;
+			}
+			const mapped = M.Prompts.parseBatchTranslations(raw, batch.map(unit => unit.id));
+			let filled = 0;
+			for (const unit of batch) {
+				const text = mapped.get(String(unit.id));
+				if (text) {
+					state.translations.set(unit.id, text);
+					unit.segment.pending = false;
+					paintSegment(unit.segment);
+					filled++;
 				}
 				else {
-					const byId = new Map(translations.map(item => [String(item.id), item.text]));
-					for (const segment of batch) {
-						const value = byId.get(segment.id);
-						state.translations.set(segment.id, (value || '').trim() || '—');
-						segment.pending = false;
-						paintSegment(segment);
-					}
+					unit.segment.pending = false;
+					paintSegment(unit.segment);
 				}
 			}
+			// A batch that came back incomplete is retried in halves: two paragraphs
+			// per request is a format problem, not a translation problem.
+			if (filled < batch.length && batch.length > 1 && !signal.aborted) {
+				const half = Math.ceil(batch.length / 2);
+				filled += await translateBatch(batch.slice(0, half), signal);
+				filled += await translateBatch(batch.slice(half), signal);
+			}
+			else if (!filled && batch.length === 1) {
+				throw new Error(t('error.empty'));
+			}
+			persist();
+			return filled;
 		}
 
 		async function start() {
@@ -663,7 +725,7 @@
 				app.toast(t('toast.noText'), 'error');
 				return;
 			}
-			const pending = pendingParagraphs();
+			const pending = pendingUnits();
 			if (!pending.length) {
 				app.toast(t('translate.done'), 'success');
 				return;
@@ -678,15 +740,27 @@
 			const signal = state.abort.signal;
 			const concurrency = Math.max(1, Math.min(M.Prefs.getInt('concurrency', 3), 6));
 			let firstError = null;
-			const queue = pending.slice();
+			const queue = buildBatches(pending);
+			// Start from the page the reader is looking at: the first visible card
+			// filling in beats a finished page 40 further down.
+			const currentPage = M.PdfDoc.currentPageIndex?.(app.reader) ?? 0;
+			queue.sort((a, b) => Math.abs(a[0].paragraph.pageIndex - currentPage)
+				- Math.abs(b[0].paragraph.pageIndex - currentPage));
+			state.batchStats = { units: pending.length, batches: queue.length };
+			M.Log.info('translate: starting', {
+				units: pending.length,
+				batches: queue.length,
+				batchChars: M.Prefs.getInt('batchChars', 2200),
+				concurrency
+			});
 			const workers = new Array(concurrency).fill(0).map(async () => {
 				for (;;) {
-					const paragraph = queue.shift();
-					if (!paragraph || signal.aborted) {
+					const batch = queue.shift();
+					if (!batch || signal.aborted) {
 						return;
 					}
 					try {
-						await translateParagraph(paragraph, signal);
+						await translateBatch(batch, signal);
 					}
 					catch (e) {
 						firstError = firstError || e;
@@ -962,6 +1036,9 @@
 			start,
 			stop,
 			retranslate,
+			get batchStats() {
+				return state.batchStats || null;
+			},
 			onPdfHover,
 			onDockScroll,
 			markDockScrollProgrammatic,

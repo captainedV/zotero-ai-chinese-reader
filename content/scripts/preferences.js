@@ -384,6 +384,13 @@ var MoonlitPreferences = {
 			this.field('每分钟请求上限', 'Requests per minute', this.numberInput('maxRpm', { min: 0, max: 600, step: 5, fallback: 45 }),
 				'超过网关的每分钟上限会返回 429；默认 45 留有余量，0 表示不限制',
 				'Gateways reject requests above their per-minute cap (429); 45 leaves headroom, 0 disables the budget'),
+			this.field('每次请求的原文上限（字符）', 'Source chars per request', this.numberInput('batchChars', { min: 400, max: 8000, step: 200, fallback: 2200 }),
+				'连续段落会合并进同一次请求，既能带上上下文，也减少往返与开销；太大时模型容易漏条目',
+				'Consecutive paragraphs share one request for context and fewer round trips; too large and the model starts dropping items'),
+			this.field('每次请求的最大段数', 'Paragraphs per request', this.numberInput('batchUnits', { min: 1, max: 20, step: 1, fallback: 6 }),
+				'与字符上限共同决定批量大小', 'Combined with the character cap'),
+			this.field('上下文长度（字符）', 'Context chars', this.numberInput('contextChars', { min: 0, max: 3000, step: 100, fallback: 900 }),
+				'每段前后各带多少原文作为参考，用于统一术语与指代', 'How much neighbouring source text is sent as reference'),
 			this.field('并发请求数', 'Concurrent requests', this.numberInput('concurrency', { min: 1, max: 8, step: 1, fallback: 3 }),
 				'翻译全文时同时发出的请求数量', 'Parallel requests while translating'),
 			this.field('网络传输', 'Transport', this.select('transport', [

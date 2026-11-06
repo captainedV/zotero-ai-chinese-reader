@@ -11,6 +11,11 @@ pref("extensions.zotero.moonlit.maxTokens", 8192);
 // Bail out of a stalled stream and retry without streaming.
 pref("extensions.zotero.moonlit.stallSeconds", 15);
 pref("extensions.zotero.moonlit.concurrency", 3);
+// Consecutive paragraphs are packed into one request up to this many characters.
+pref("extensions.zotero.moonlit.batchChars", 2200);
+pref("extensions.zotero.moonlit.batchUnits", 6);
+// How much neighbouring text each request carries as context.
+pref("extensions.zotero.moonlit.contextChars", 900);
 // fetch (1.0.1 behaviour) or xhr; the plugin falls back to xhr when fetch is missing.
 pref("extensions.zotero.moonlit.transport", "fetch");
 // Requests per minute; stay under the gateway limit (0 disables the budget).

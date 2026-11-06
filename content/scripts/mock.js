@@ -44,8 +44,8 @@
 	}
 
 	function extractSentences(prompt) {
-		// The translate prompt embeds `[{"id":...,"text":...}]` right after a header.
-		const match = prompt.match(/Sentences to translate:\s*(\[[\s\S]*?\])\s*\n\s*Reply with JSON/);
+		// Both prompt shapes embed `[{"id":…,"text":…}]` before the JSON instruction.
+		const match = prompt.match(/(?:Sentences to translate|Items to translate[^\n]*):\s*(\[[\s\S]*?\])\s*\n\s*Reply with JSON/);
 		if (!match) {
 			return null;
 		}

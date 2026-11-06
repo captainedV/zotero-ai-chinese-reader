@@ -266,6 +266,19 @@
 				assertStep('pointer → paragraph hit-testing works', false, 'page mapping unavailable');
 			}
 
+			// Batching: several paragraphs share one request, with context attached.
+			try {
+				const stats = app.views.translate.batchStats;
+				assertStep('translation batches paragraphs instead of one request each',
+					!!stats && stats.batches > 0 && stats.batches < stats.units,
+					stats ? `units=${stats.units} batches=${stats.batches}` : 'no stats');
+				const budget = M.Prefs.getInt('batchChars', 2200);
+				assertStep('batch size is bounded by the character budget', budget >= 400, `${budget} chars`);
+			}
+			catch (e) {
+				assertStep('translation batches paragraphs instead of one request each', false, e.message);
+			}
+
 			// Reopening with the switch already on must continue the work, not sit on
 			// "paused". Clear the translations, interrupt the run, then resume.
 			try {

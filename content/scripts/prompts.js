@@ -97,6 +97,149 @@
 		return { system, prompt, json: true };
 	}
 
+	const BATCH_SYSTEM_ZH = [
+		'你是一位资深学术论文译者，熟悉计算机科学与工程领域的术语与行文习惯。',
+		'任务：把“待翻译条目”逐条翻译成目标语言，并对齐原文的语句边界。',
+		'上下文（论文标题、当前章节、前后段落）只用于消除歧义、统一术语与指代，**不要翻译上下文本身**。',
+		'要求：\n' +
+		'1. 与上下文中的术语保持一致；关键术语首次出现时保留英文原词，如“多头潜在注意力（Multi-head Latent Attention, MLA）”。\n' +
+		'2. 忠实原意，学术语体，通顺可读；不要添加原文没有的解释、不要合并或拆分条目。\n' +
+		'3. 数学符号、变量名、公式片段、引用编号、图表编号、URL、代码标识符保持原样。\n' +
+		'4. 条目 id 必须原样返回，一条都不能少、不能多。\n' +
+		'5. 只输出 JSON，不要输出 Markdown 代码块或任何解释。'
+	].join('\n');
+
+	const BATCH_SYSTEM_EN = [
+		'You are a senior academic translator who knows the terminology and register of peer-reviewed papers.',
+		'Task: translate every item in "Items to translate" into the target language, keeping the original sentence boundaries.',
+		'The context (paper title, current section, neighbouring paragraphs) is only there to disambiguate meaning and keep terminology consistent — never translate the context itself.',
+		'Requirements:\n' +
+		'1. Keep terminology consistent with the context; on first use keep key terms in the source language in brackets.\n' +
+		'2. Stay faithful, use natural academic prose, never add explanations, never merge or split items.\n' +
+		'3. Preserve math symbols, variable names, citation numbers, figure/table numbers, URLs and identifiers verbatim.\n' +
+		'4. Return every input id exactly once; no extras, none missing.\n' +
+		'5. JSON only — no Markdown fences, no commentary.'
+	].join('\n');
+
+	/** How much of a neighbouring paragraph is enough to fix the context. */
+	function trimContext(text, limit) {
+		const source = String(text || '').replace(/\s+/g, ' ').trim();
+		if (source.length <= limit) {
+			return source;
+		}
+		return `${source.slice(0, limit)}…`;
+	}
+
+	/**
+	 * Translate several paragraphs (or sentences) in one request.
+	 *
+	 * One request per paragraph wastes the model's context window and makes it
+	 * invent terminology for every fragment; batching consecutive paragraphs with
+	 * their surroundings gives it the same picture a human translator has.
+	 *
+	 * @param {Object} params
+	 * @param {Array<{id:string,text:string}>} params.units items to translate, in reading order
+	 * @param {{title?:string, section?:string, before?:string, after?:string}} params.context
+	 * @param {string} [params.targetLang]
+	 * @param {number} [params.contextChars] cap for the neighbouring text
+	 */
+	function buildTranslateBatchPrompt({ units, context = {}, targetLang, contextChars = 900 }) {
+		const lang = languageName(targetLang || targetLanguage());
+		const chinese = isChinese(lang.code);
+		const custom = customPrompt('promptTranslate');
+		const system = custom || (chinese ? BATCH_SYSTEM_ZH : BATCH_SYSTEM_EN);
+		const lines = ['[[TASK:translate]]', `Target language: ${lang.english} (${lang.label})`, ''];
+		if (context.title) {
+			lines.push(`Paper title: ${trimContext(context.title, 200)}`);
+		}
+		if (context.section) {
+			lines.push(`Current section: ${trimContext(context.section, 120)}`);
+		}
+		if (context.before) {
+			lines.push(`Preceding paragraph (context only, do not translate):\n${trimContext(context.before, contextChars)}`);
+		}
+		if (context.after) {
+			lines.push(`Following paragraph (context only, do not translate):\n${trimContext(context.after, contextChars)}`);
+		}
+		lines.push('');
+		lines.push(`Items to translate (${units.length}, JSON array of {id,text}, in reading order):`);
+		lines.push(JSON.stringify(units));
+		lines.push('');
+		lines.push('Reply with JSON: {"translations":[{"id":"<same id>","text":"<translation>"}]}');
+		return { system, prompt: lines.join('\n'), json: true };
+	}
+
+	/**
+	 * Pull `id → text` out of whatever the model replied with.
+	 *
+	 * Models wrap the array differently (bare array, {translations:…}, {data:…},
+	 * or an object keyed by id), and a batch is only useful if every id survives.
+	 * Anything unrecognisable returns an empty map so the caller can retry with a
+	 * smaller batch instead of writing half a translation.
+	 */
+	function parseBatchTranslations(raw, expectedIds) {
+		const ids = new Set((expectedIds || []).map(String));
+		const map = new Map();
+		const push = (id, text) => {
+			if (id === undefined || id === null || typeof text !== 'string') {
+				return;
+			}
+			const key = String(id);
+			const value = text.trim();
+			if (!value || (ids.size && !ids.has(key))) {
+				return;
+			}
+			map.set(key, value);
+		};
+		const walk = (value, depth = 0) => {
+			if (!value || depth > 4) {
+				return;
+			}
+			if (Array.isArray(value)) {
+				for (const item of value) {
+					if (item && typeof item === 'object') {
+						const id = item.id ?? item.key ?? item.sentence_id;
+						const text = item.text ?? item.translation ?? item.target ?? item.content;
+						if (id !== undefined && text !== undefined) {
+							push(id, text);
+							continue;
+						}
+					}
+					walk(item, depth + 1);
+				}
+				return;
+			}
+			if (typeof value === 'object') {
+				for (const [key, item] of Object.entries(value)) {
+					if (typeof item === 'string') {
+						push(key, item);
+					}
+					else if (item && typeof item === 'object') {
+						const text = item.text ?? item.translation ?? item.target ?? item.content;
+						if (text !== undefined) {
+							push(item.id ?? key, text);
+						}
+						else {
+							walk(item, depth + 1);
+						}
+					}
+					else {
+						walk(item, depth + 1);
+					}
+				}
+			}
+		};
+		let parsed;
+		try {
+			parsed = M.AI?.parseJson ? M.AI.parseJson(raw) : JSON.parse(raw);
+		}
+		catch (e) {
+			return map;
+		}
+		walk(parsed);
+		return map;
+	}
+
 	/** Map step of the summary: bullet notes for one chunk of the paper. */
 	function buildSummaryChunkPrompt({ chunk, meta, chunkIndex, chunkCount, targetLang }) {
 		const lang = languageName(targetLang || targetLanguage());
@@ -175,6 +318,8 @@
 		isChinese,
 		buildTranslatePrompt,
 		buildTranslateParagraphPrompt,
+		buildTranslateBatchPrompt,
+		parseBatchTranslations,
 		buildSummaryChunkPrompt,
 		buildSummaryFinalPrompt,
 		buildHighlightPrompt
