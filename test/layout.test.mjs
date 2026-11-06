@@ -314,6 +314,96 @@ await testAsync('multi-page document indices stay consistent', async () => {
   assertEqual(hit.paragraphId, target.id, 'resolved to the right paragraph');
 });
 
+console.log('\n== sentence joins across layout breaks ==');
+
+const para = (text, pageIndex, y, { role = 'body', size = 10, x = 100 } = {}) => ({
+  id: `x${pageIndex}-${Math.round(y)}`,
+  text,
+  role,
+  translatable: true,
+  fontSize: size,
+  pageIndex,
+  rects: [[x, y - size, x + 380, y]],
+  rect: [x, y - size, x + 380, y],
+  lines: [{ text, rect: [x, y - size, x + 380, y], fontSize: size, items: [{ text, rect: [x, y - size, x + 380, y] }] }]
+});
+const page = (index, paragraphs) => ({ pageIndex: index, height: 800, columns: 1, paragraphs });
+
+test('a paragraph cut by a page break is joined into one', () => {
+  const pages = [
+    page(0, [para('We evaluate the model on a wide range of benchmarks and', 0, 700)]),
+    page(1, [para('even beats most of closed-source models.', 1, 760)])
+  ];
+  M.Layout.mergeBrokenSentences(pages);
+  assertEqual(pages[0].paragraphs.length, 1);
+  assertEqual(pages[1].paragraphs.length, 1, 'the second half becomes a shadow, not a second paragraph');
+  assertEqual(pages[1].paragraphs[0].shadow, true);
+  assertEqual(pages[1].paragraphs[0].id, pages[0].paragraphs[0].id, 'hover maps both halves to one card');
+  assert(pages[0].paragraphs[0].text.endsWith('closed-source models.'),
+    pages[0].paragraphs[0].text);
+  assertEqual(pages[0].paragraphs[0].continuation.length, 1);
+});
+
+test('a sentence is not joined when the paragraph already ended', () => {
+  const pages = [
+    page(0, [para('This paragraph is complete.', 0, 700)]),
+    page(1, [para('another paragraph starts here.', 1, 760)])
+  ];
+  M.Layout.mergeBrokenSentences(pages);
+  assertEqual(pages[0].paragraphs[0].text, 'This paragraph is complete.');
+  assertEqual(pages[1].paragraphs[0].shadow, undefined);
+});
+
+test('a sentence cut by a column break on the same page is joined', () => {
+  const pages = [page(0, [
+    para('the reverse process uses a score network and', 0, 200, { x: 70 }),
+    para('the forward process is its mirror image.', 0, 700, { x: 320 })
+  ])];
+  M.Layout.mergeBrokenSentences(pages);
+  assertEqual(pages[0].paragraphs.length, 1, 'one paragraph after the join');
+  assert(pages[0].paragraphs[0].text.endsWith('mirror image.'), pages[0].paragraphs[0].text);
+  assertEqual(pages[0].paragraphs[0].rects.length, 2, 'both halves keep their rects');
+});
+
+test('a heading is never glued to the paragraph above it', () => {
+  const mk = (text, top) => ({
+    text, fontSize: 10, rect: [100, top - 12, 480, top],
+    x0: 100, x1: 480, baseline: top, hasEOL: true,
+    items: [{ text, rect: [100, top - 12, 480, top] }]
+  });
+  const paragraphs = M.Layout.groupLinesIntoParagraphs([
+    mk('Baselines include diffusion models, and Bridge Models.', 700),
+    mk('2.1. Image-to-Image Translation', 688)
+  ]);
+  assertEqual(paragraphs.length, 2, 'the numbered section title starts its own paragraph');
+  assertEqual(paragraphs[1].text, '2.1. Image-to-Image Translation');
+});
+
+test('a short numbered entry with a page number is a table-of-contents line', () => {
+  for (const text of ['B DeepSeek-V2-Lite: A 16B Model Equipped with MLA 29', '3 Pre-Training 11', '4. Alignment 16']) {
+    const verdict = M.Layout.classifyParagraph(
+      { text, fontSize: 10, rect: [100, 400, 500, 412], lines: [] },
+      { bodySize: 10, pageHeight: 800, isFirstPage: false, inAbstract: false, seenBody: true, topBand: false, tocPage: false }
+    );
+    assertEqual(verdict.role, 'toc', text);
+  }
+});
+
+test('font tiers give heading levels from the size histogram', () => {
+  const paragraphs = [
+    ...Array.from({ length: 40 }, () => ({ text: 'x'.repeat(80), fontSize: 10 })),
+    { text: 'Title of the paper', fontSize: 20 },
+    { text: '1 Introduction', fontSize: 14 }
+  ];
+  const tiers = M.Layout.fontTiers(paragraphs);
+  assertEqual(tiers.body, 10);
+  assertEqual(tiers.h1, 20);
+  assertEqual(tiers.h2, 14);
+  assertEqual(M.Layout.tierOf(20, tiers), 1);
+  assertEqual(M.Layout.tierOf(14, tiers), 2);
+  assertEqual(M.Layout.tierOf(10, tiers), 0);
+});
+
 console.log('\n== markdown ==');
 const MD = loadPlugin('markdown.js').Markdown;
 test('renders headings, lists and bold', () => {

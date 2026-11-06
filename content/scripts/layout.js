@@ -477,7 +477,28 @@
 		const maxGap = prevEndsSentence || !(softStart || hyphenated)
 			? medianHeight * 0.85
 			: medianHeight * 1.5;
-		if (gap > maxGap) {
+		// A line that does not finish its sentence continues on the next one even
+		// when the line spacing is unusually large (double-spaced theses, figures
+		// with a caption line in between): the text flow outranks the geometry, but
+		// only inside the same column, so a two-column paper never interleaves.
+		// A numbered or section-titled line begins something new even at body size:
+		// gluing "2.1. Image-to-Image Translation" onto the paragraph above ruins the
+		// heading and the paragraph at the same time.
+		if ((hasNumbering(nextText) || SECTION_RE.test(nextText)) && nextText.length <= 70) {
+			return false;
+		}
+		const prevLooksLikeIndex = /\s\d{1,4}$/.test(prevText) || /\.{2,}/.test(prevText);
+		const continuingSentence = !prevEndsSentence
+			&& Math.abs(prev.rect[0] - next.rect[0]) <= Math.max(medianHeight * 0.6, 4)
+			&& gap <= medianHeight * 2.4
+			&& !prevLooksLikeIndex
+			// A capital-letter start only counts as a continuation when the previous
+			// line is a full line of prose: a short line followed by a capital is a
+			// section change, not a wrapped sentence.
+			// A numbered/known section title is never the tail of a sentence.
+			&& !hasNumbering(nextText) && !SECTION_RE.test(nextText)
+			&& (softStart || (prevText.length > 60 && !/^[A-Z][a-z]+\s+[A-Z]/.test(nextText)));
+		if (gap > maxGap && !continuingSentence) {
 			return false;
 		}
 		// Overlapping or above-previous lines belong to another block.
@@ -599,6 +620,58 @@
 		};
 	}
 
+	/**
+	 * Font tiers, weighted by the amount of text set in each size.
+	 *
+	 * The most-used size is the body; the distinct sizes above it become h1/h2/h3.
+	 * A heading level from this map is far steadier than a fixed ratio: papers set
+	 * 11 pt body with 11.5 pt captions, and a bare ratio turns those into headings.
+	 */
+	function fontTiers(paragraphs) {
+		const weights = new Map();
+		for (const paragraph of paragraphs) {
+			const size = Math.round((paragraph.fontSize || 0) * 10) / 10;
+			if (!size) {
+				continue;
+			}
+			weights.set(size, (weights.get(size) || 0) + Math.max(1, (paragraph.text || '').length));
+		}
+		if (!weights.size) {
+			return { body: 10 };
+		}
+		const ranked = [...weights.entries()].sort((a, b) => b[1] - a[1]);
+		const body = ranked[0][0];
+		const larger = [...weights.keys()].filter(size => size > body + 1).sort((a, b) => b - a);
+		const tiers = { body };
+		if (larger[0] !== undefined) {
+			tiers.h1 = larger[0];
+		}
+		if (larger[1] !== undefined) {
+			tiers.h2 = larger[1];
+		}
+		if (larger[2] !== undefined) {
+			tiers.h3 = larger[2];
+		}
+		return tiers;
+	}
+
+	/** Which tier a size belongs to: 1/2/3 for headings, 0 for body-sized text. */
+	function tierOf(size, tiers) {
+		if (!size || !tiers) {
+			return 0;
+		}
+		if (tiers.h1 !== undefined && size >= tiers.h1 - 0.6) {
+			return 1;
+		}
+		if (tiers.h2 !== undefined && size >= tiers.h2 - 0.6) {
+			return 2;
+		}
+		if (tiers.h3 !== undefined && size >= tiers.h3 - 0.6) {
+			return 3;
+		}
+		return 0;
+	}
+
 	/** Median font size of the running prose, weighted by how much text it carries. */
 	function bodyFontSize(paragraphs) {
 		const weighted = [];
@@ -648,20 +721,52 @@
 	}
 
 	function isTocLine(text) {
-		return DOT_LEADER_RE.test(text) || /^\s*(contents|table of contents|目\s*录)\s*$/i.test(text);
+		const trimmed = text.trim();
+		if (!trimmed) {
+			return false;
+		}
+		if (DOT_LEADER_RE.test(trimmed) || /^\s*(contents|table of contents|目\s*录)\s*$/i.test(trimmed)) {
+			return true;
+		}
+		// "3 Pre-Training 11", "B DeepSeek-V2-Lite: A 16B Model 29" — a numbered or
+		// lettered entry that ends with a page number. Short and prefix-anchored, so a
+		// body sentence that merely ends with a year is not caught.
+		if (trimmed.length > 90) {
+			return false;
+		}
+		if (!/^(?:\d+(?:\.\d+)*|[A-Z]|[IVX]{1,4})\.?\s+\S/.test(trimmed)) {
+			return false;
+		}
+		return /\s\d{1,4}\s*$/.test(trimmed);
 	}
 
-	/** A heading is short, starts like a title and does not end like a sentence. */
+	/** A numbering prefix makes a terminal period acceptable: "1. Introduction". */
+	function hasNumbering(text) {
+		return /^\d+(?:\.\d+)*\.?\s+[A-Z\u4e00-\u9fff]/.test(text)
+			|| /^[A-Z]\.\s+[A-Z]/.test(text)
+			|| /^第[一二三四五六七八九十\d]+[章节部分]/.test(text);
+	}
+
+	/**
+	 * A heading is short, starts like a title and does not end like a sentence.
+	 * The strict rules come from the pdf_to_md converter: without them a 9-word
+	 * caption or a table label at heading size becomes a "section heading", and
+	 * headings are translated differently from prose.
+	 */
 	function looksLikeHeading(text) {
 		const trimmed = text.trim();
-		if (!trimmed || trimmed.length > 120) {
+		if (!trimmed || trimmed.length > 80) {
 			return false;
 		}
 		const words = (trimmed.match(/[A-Za-z\u4e00-\u9fff]+/g) || []).length;
 		if (words > 16) {
 			return false;
 		}
-		if (/[.,;]$/.test(trimmed)) {
+		// A complete sentence never is one, unless it carries a section number.
+		if (/[.。!！?？]$/.test(trimmed) && !hasNumbering(trimmed)) {
+			return false;
+		}
+		if (/[,;，；]$/.test(trimmed)) {
 			return false;
 		}
 		const stats = textStats(trimmed);
@@ -691,7 +796,7 @@
 	 * font size, whether this is the first page, a TOC page, and whether the
 	 * paragraph sits inside the abstract.
 	 */
-	function classifyParagraph(paragraph, ctx) {
+	function classifyParagraph(paragraph, ctx, tiers) {
 		const text = String(paragraph.text || '');
 		const trimmed = text.trim();
 		const stats = textStats(text);
@@ -745,16 +850,17 @@
 		}
 		const numberedHeading = /^\d{1,2}(?:\.\d{1,2}){0,3}\.?\s+[A-Z][a-z]+(?:\s+[A-Za-z][a-z]*)*\.?$/.test(trimmed);
 		const sectionish = SECTION_RE.test(trimmed) || numberedHeading;
-		if ((sectionish || sizeRatio >= 1.15) && looksLikeHeading(trimmed)) {
-			return { role: 'heading', translatable: true };
+		const tier = tiers ? tierOf(fontSize, tiers) : 0;
+		if ((sectionish || sizeRatio >= 1.15 || tier > 0) && looksLikeHeading(trimmed)) {
+			return { role: 'heading', translatable: true, level: tier || (sectionish ? 2 : 1) };
 		}
 
 		if (ctx.isFirstPage && ctx.topBand && !ctx.seenBody) {
-			if (sizeRatio >= 1.3 && stats.length <= 260) {
-				return { role: 'title', translatable: true };
+			if ((sizeRatio >= 1.3 || tier === 1) && stats.length <= 260) {
+				return { role: 'title', translatable: true, level: 1 };
 			}
-			if (sizeRatio >= 1.08 && sizeRatio < 1.3 && stats.length <= 220
-				&& /,| and |@|universit|institut|department|laborator|college|school/i.test(text)) {
+			const affiliation = /@|universit|institut|department|laborator|college|school|academy|research/i.test(text);
+			if (stats.length <= 220 && affiliation && (sizeRatio >= 1.0 || /@/.test(text))) {
 				return { role: 'author', translatable: false };
 			}
 		}
@@ -770,6 +876,156 @@
 		return { role: 'body', translatable: true };
 	}
 
+	const CONTINUATION_END_RE = /[.!?。！？:：;；]\s*["'”’)\]]?\s*$/;
+
+	/** Does this paragraph end a sentence (so it cannot continue over the page)? */
+	function endsSentence(text) {
+		return CONTINUATION_END_RE.test(String(text || '').trim());
+	}
+
+	/** A caption is prose too, and its second line often lands on its own. */
+	function isCaption(paragraph) {
+		const role = paragraph?.role;
+		return role === 'figure-caption' || role === 'table-caption';
+	}
+
+	/** Can a paragraph run on to the next page? Only running prose can. */
+	function canContinued(paragraph) {
+		if (!paragraph || paragraph.translatable === false) {
+			return false;
+		}
+		const role = paragraph.role || 'body';
+		return role === 'body' || role === 'abstract' || role === 'keywords';
+	}
+
+	/**
+	 * Join paragraphs that the page break cut in half.
+	 *
+	 * A paragraph that ends at the bottom of page N and resumes at the top of page
+	 * N+1 is one thought; translating the halves separately produces two broken
+	 * sentences. The merged paragraph keeps the first page's geometry for the
+	 * primary lookup and gains a `continuation` entry plus a shadow paragraph on the
+	 * following page, so hovering either half highlights the same card.
+	 *
+	 * @param {Object[]} pages pages from `buildPage`, already annotated
+	 * @returns {Object[]} the canonical paragraph list
+	 */
+	function mergeBrokenSentences(pages) {
+		// Pass 1 — inside a page, a sentence that runs from the bottom of one column
+		// into the top of the next arrives as two paragraphs. Join them when nothing
+		// (figure, table, heading) sits between and the second half starts mid-sentence.
+		for (const page of pages) {
+			const paragraphs = page.paragraphs || [];
+			for (let i = paragraphs.length - 2; i >= 0; i--) {
+				const current = paragraphs[i];
+				const next = paragraphs[i + 1];
+				// A caption absorbs its own continuation line, otherwise the tail of the
+				// caption becomes a "paragraph" right under the figure.
+				const captionTail = isCaption(current) && canContinued(next);
+				if (!captionTail && (!canContinued(current) || !canContinued(next))) {
+					continue;
+				}
+				if (endsSentence(current.text)) {
+					continue;
+				}
+				const startsLower = /^[a-zà-ÿ,;:)\]}]/.test(next.text.trim());
+				if (!startsLower) {
+					continue;
+				}
+				const hyphenated = /[A-Za-z]-$/.test(current.text.trim());
+				current.text = (hyphenated
+					? `${current.text.replace(/-$/, '')}${next.text.trim()}`
+					: `${current.text.trim()} ${next.text.trim()}`).replace(/\s{2,}/g, ' ').trim();
+				current.rects = (current.rects || []).concat(next.rects || []);
+				current.rect = unionRect(current.rects);
+				current.lines = (current.lines || []).concat(next.lines || []);
+				current.joined = (current.joined || 0) + 1;
+				paragraphs.splice(i + 1, 1);
+			}
+		}
+
+		// Pass 2 — one carry across the whole document: a sentence that runs over two page
+		// breaks keeps collecting, and each half becomes a shadow on its own page so
+		// hovering it highlights the same card.
+		let carry = null;
+		for (const page of pages) {
+			const paragraphs = page.paragraphs || [];
+			if (!paragraphs.length) {
+				continue;
+			}
+			let first = 0;
+			while (first < paragraphs.length && !canContinued(paragraphs[first])) {
+				first++;
+			}
+			const head = paragraphs[first];
+			// The continuation must be the *first* prose at the top of the page, in the
+			// left column. Without this, a two-column page hands back a paragraph from
+			// the middle of the right column and the sentence gets a nonsense ending.
+			const pageWidth = page.width || 600;
+			// The continuation is the first prose on the page, at the start of a column.
+			// A figure may occupy the top of the page, so vertical position is not a
+			// usable test — reading order plus column start is.
+			const headAtColumnStart = !!head && (head.rect?.[0] ?? pageWidth) <= pageWidth * 0.6;
+			// …and the sentence has to actually be unfinished: a lowercase start, or a
+			// hanging function word at the end of the carried text.
+			const HANGING_RE = /\b(and|or|of|in|to|the|a|an|with|for|by|as|that|which|who|is|are|was|were|be|been|being|we|our|it|its|their|this|these|those|from|on|at|than|while|but|so|into|over|under|between|among|via)$/i;
+			const headContinues = (head && /^[a-zà-ÿ,;:)\]}]/.test(head.text.trim()))
+				|| HANGING_RE.test(carry?.text.trim() || '');
+			if (carry && head && headAtColumnStart && headContinues) {
+				const startsLower = /^[a-zà-ÿ,;:)\]}]/.test(head.text.trim());
+				const sameSize = !head.fontSize || !carry.fontSize || head.fontSize <= carry.fontSize * 1.05;
+				if (startsLower || sameSize) {
+					const hyphenated = /[A-Za-z]-$/.test(carry.text.trim());
+					carry.text = (hyphenated
+						? `${carry.text.replace(/-$/, '')}${head.text.trim()}`
+						: `${carry.text.trim()} ${head.text.trim()}`).replace(/\s{2,}/g, ' ').trim();
+					carry.continuation = (carry.continuation || []).concat([{
+						pageIndex: head.pageIndex,
+						rects: head.rects,
+						lines: head.lines,
+						text: head.text
+					}]);
+					paragraphs[first] = {
+						id: carry.id,
+						pageIndex: head.pageIndex,
+						rects: head.rects,
+						rect: head.rect,
+						bbox: head.bbox || head.rect,
+						lines: head.lines,
+						text: head.text,
+						fontSize: head.fontSize,
+						role: carry.role,
+						translatable: carry.translatable,
+						level: carry.level || 0,
+						shadow: true,
+						continuationOf: carry.id
+					};
+					// Finished the sentence? Then the paragraph really ends here.
+					carry = endsSentence(carry.text) ? null : carry;
+				}
+				else {
+					carry = null;
+				}
+			}
+			// Only the paragraph nearest the page end can bleed into the next page.
+			// A carried paragraph still unfinished stays the carry (its remaining text
+			// is this page's last one), otherwise the unfinished tail takes over.
+			let last = paragraphs.length - 1;
+			while (last >= 0 && !canContinued(paragraphs[last])) {
+				last--;
+			}
+			const tail = paragraphs[last];
+			const tailUnfinished = tail && !tail.shadow && !endsSentence(tail.text);
+			if (tailUnfinished) {
+				carry = tail;
+			}
+			else if (carry && endsSentence(carry.text)) {
+				carry = null;
+			}
+		}
+		return pages;
+	}
+
 	/**
 	 * Annotate every paragraph of a document with `role` and `translatable`.
 	 * `pages` is the array produced by `buildPage`; the result also flags the
@@ -782,24 +1038,53 @@
 				all.push(paragraph);
 			}
 		}
-		const bodySize = bodyFontSize(all);
+		const tiers = fontTiers(all);
+		const bodySize = tiers.body || bodyFontSize(all);
 		const byPage = pages.map(page => page.paragraphs);
 
-		// A paragraph that repeats on most pages is a running head or a footer.
-		const seen = new Map();
-		for (const paragraphs of byPage) {
-			for (const paragraph of paragraphs) {
-				const key = String(paragraph.text || '').toLowerCase().replace(/\s+/g, ' ').replace(/\d+/g, '#').trim();
-				if (key.length < 4) {
+		// Running heads and footers: exact repeated blocks in the page margins. Two
+		// keys are counted — the text itself (a fixed header) and the text with digits
+		// blanked (a header carrying the page number) — over a sample of the first and
+		// last pages, and only text inside the top/bottom band can be noise.
+		const sampleIndexes = pages.length > 40
+			? [...Array(20).keys(), ...pages.length - 20 + [...Array(20).keys()]]
+			: pages.map((unused, index) => index);
+		const pageHeightOf = index => pages[index]?.height || 800;
+		const inMarginBand = (paragraph, pageIndex) => {
+			const height = pageHeightOf(pageIndex);
+			const top = paragraph.rect ? Math.max(0, height - paragraph.rect[3]) : 0;
+			const bottom = paragraph.rect ? Math.max(0, paragraph.rect[1]) : 0;
+			return top < height * 0.11 || bottom < height * 0.1;
+		};
+		const marginCounts = new Map();
+		const marginTotal = new Map();
+		for (const index of sampleIndexes) {
+			const seenOnPage = new Set();
+			for (const paragraph of byPage[index] || []) {
+				if (!inMarginBand(paragraph, index)) {
 					continue;
 				}
-				seen.set(key, (seen.get(key) || 0) + 1);
+				const key = String(paragraph.text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+				if (key.length < 3) {
+					continue;
+				}
+				const normalized = key.replace(/\d+/g, '#');
+				for (const variant of [key, normalized]) {
+					if (seenOnPage.has(variant)) {
+						continue;
+					}
+					seenOnPage.add(variant);
+					marginCounts.set(variant, (marginCounts.get(variant) || 0) + 1);
+				}
+			}
+			for (const variant of seenOnPage) {
+				marginTotal.set(variant, (marginTotal.get(variant) || 0) + 1);
 			}
 		}
-		const repeatThreshold = Math.max(3, Math.ceil(pages.length * 0.4));
+		const sampledPages = Math.max(1, sampleIndexes.length);
 		const repeated = new Set();
-		for (const [key, count] of seen) {
-			if (count >= repeatThreshold) {
+		for (const [key, count] of marginCounts) {
+			if (count / sampledPages > 0.6) {
 				repeated.add(key);
 			}
 		}
@@ -833,6 +1118,26 @@
 					}
 				}
 			}
+			// A wrapped heading arrives as two stacked paragraphs ("Agent Tools &" /
+			// "Interoperability"). Merging them keeps one heading, one translation.
+			for (let i = paragraphs.length - 2; i >= 0; i--) {
+				const current = paragraphs[i];
+				const next = paragraphs[i + 1];
+				const sizeA = current.fontSize || bodySize;
+				const sizeB = next.fontSize || bodySize;
+				const sameSize = Math.abs(sizeA - sizeB) <= 0.6;
+				const bodyLevel = sizeA >= bodySize * 0.98;
+				const shortFirst = current.text.trim().length < 70 && !/[.。!！?？:：;；]$/.test(current.text.trim());
+				const gapBelow = (current.rect?.[1] ?? 0) - (next.rect?.[3] ?? 0);
+				const adjacent = gapBelow <= sizeA * 1.4 && gapBelow >= -sizeA * 0.4;
+				if (sameSize && bodyLevel && shortFirst && adjacent) {
+					current.text = `${current.text.trim()} ${next.text.trim()}`.replace(/\s+/g, ' ').trim();
+					current.rects = (current.rects || []).concat(next.rects || []);
+					current.rect = unionRect(current.rects);
+					current.lines = (current.lines || []).concat(next.lines || []);
+					paragraphs.splice(i + 1, 1);
+				}
+			}
 			const page = pages[pageIndex];
 			const isFirstPage = pageIndex === 0;
 			// A table of contents is a whole page of "1 Introduction 4" lines: none of
@@ -856,11 +1161,13 @@
 					seenBody,
 					topBand: isFirstPage && i < 6
 				};
-				const verdict = classifyParagraph(paragraph, ctx);
-				const key = String(paragraph.text || '').toLowerCase().replace(/\s+/g, ' ').replace(/\d+/g, '#').trim();
-				const repeatedNoise = repeated.has(key) && isEdgeParagraph(paragraph, page);
+				const verdict = classifyParagraph(paragraph, ctx, tiers);
+				const key = String(paragraph.text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+				const normalizedKey = key.replace(/\d+/g, '#');
+				const repeatedNoise = (repeated.has(key) || repeated.has(normalizedKey)) && isEdgeParagraph(paragraph, page);
 				paragraph.role = repeatedNoise ? 'pageNoise' : verdict.role;
 				paragraph.translatable = repeatedNoise ? false : verdict.translatable;
+				paragraph.level = verdict.level || 0;
 				if (paragraph.role === 'heading') {
 					inAbstract = /^(abstract|摘要)\b/i.test(paragraph.text.trim());
 				}
@@ -870,7 +1177,7 @@
 				}
 			}
 		}
-		return { bodySize, pages: byPage };
+		return { bodySize, tiers, pages: byPage };
 	}
 
 	// -------------------------------------------------------------- page build
@@ -967,7 +1274,12 @@
 		mergeLineTexts,
 		buildPage,
 		annotateDocument,
+		mergeBrokenSentences,
+		mergePageBreaks: mergeBrokenSentences,
+		endsSentence,
 		classifyParagraph,
+		fontTiers,
+		tierOf,
 		bodyFontSize,
 		isNoise,
 		unionRect,

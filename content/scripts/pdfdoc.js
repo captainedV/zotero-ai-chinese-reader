@@ -129,24 +129,39 @@
 		// formula, a TOC line or a running head must stay untouched, while the title,
 		// abstract, headings and captions are the most valuable text on the page.
 		M.Layout.annotateDocument(pages);
-
-		const paragraphs = [];
+		// Stable ids first: merging page breaks copies an id onto the shadow entry on
+		// the following page, and the canonical list dedupes on it.
+		let nextId = 0;
 		for (const page of pages) {
 			for (const paragraph of page.paragraphs) {
+				paragraph.id = `p${nextId++}`;
+				if (paragraph.rects?.length) {
+					paragraph.bbox = M.Layout.roundRect(M.Layout.unionRect(paragraph.rects));
+				}
+				else if (paragraph.rect) {
+					paragraph.bbox = paragraph.rect;
+				}
+			}
+		}
+		// A paragraph the page break cut in half is one thought: join the halves so
+		// the model sees a full sentence instead of two broken ones.
+		M.Layout.mergePageBreaks(pages);
+
+		const paragraphs = [];
+		const seenIds = new Set();
+		for (const page of pages) {
+			for (const paragraph of page.paragraphs) {
+				// A shadow entry points at a paragraph continued from the previous page;
+				// the canonical paragraph already covers its text.
+				if (paragraph.shadow || seenIds.has(paragraph.id)) {
+					continue;
+				}
+				seenIds.add(paragraph.id);
 				paragraphs.push(paragraph);
 			}
 		}
-		// Stable document-wide ids, plus a bounding box: hovering between the lines
-		// of a paragraph (or in a word gap) must still resolve to that paragraph.
 		paragraphs.forEach((paragraph, index) => {
-			paragraph.id = `p${index}`;
 			paragraph.docIndex = index;
-			if (paragraph.rects?.length) {
-				paragraph.bbox = M.Layout.roundRect(M.Layout.unionRect(paragraph.rects));
-			}
-			else if (paragraph.rect) {
-				paragraph.bbox = paragraph.rect;
-			}
 		});
 
 		const translatable = paragraphs.filter(paragraph => paragraph.translatable !== false);

@@ -48,11 +48,25 @@ for (let i = 1; i <= maxPages; i++) {
 	pages.push(built);
 }
 const info = M.Layout.annotateDocument(pages);
-const elapsed = Date.now() - started;
-
-const all = [];
+let nextId = 0;
 for (const page of pages) {
 	for (const paragraph of page.paragraphs) {
+		paragraph.id = `p${nextId++}`;
+	}
+}
+M.Layout.mergePageBreaks(pages);
+const elapsed = Date.now() - started;
+
+// The canonical list: what gets translated. Shadow entries only exist per page so
+// hovering the second half of a page-break paragraph finds the same card.
+const all = [];
+const seen = new Set();
+for (const page of pages) {
+	for (const paragraph of page.paragraphs) {
+		if (paragraph.shadow || seen.has(paragraph.id)) {
+			continue;
+		}
+		seen.add(paragraph.id);
 		all.push(paragraph);
 	}
 }
@@ -62,7 +76,8 @@ const lines = [];
 lines.push(`# Segmentation dump: ${path.basename(file)}`);
 lines.push('');
 lines.push(`- pages: ${pages.length} / ${pdf.numPages}`);
-lines.push(`- paragraphs: ${all.length}`);
+lines.push(`- paragraphs (canonical): ${all.length}`);
+lines.push(`- page-break joins: ${all.filter(paragraph => paragraph.continuation).length}`);
 lines.push(`- translatable: ${translatable.length}`);
 lines.push(`- body font size: ${Math.round(info.bodySize * 10) / 10}`);
 lines.push(`- extract time: ${elapsed} ms`);
