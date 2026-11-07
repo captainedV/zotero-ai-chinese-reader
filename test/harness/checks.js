@@ -416,7 +416,9 @@
 					html.slice(0, 40));
 				check('note keeps the summary structure', /<h[23]/.test(html),
 					`${(html.match(/<h[23]/g) || []).length} sections`);
-				check('note carries the AI footer', /Moonlit Reader/.test(html));
+				// The footer names the plugin; accept either the product name or the codename.
+				check('note carries the AI footer', /Zotero AI Chinese Reader|moonlit|Moonlit/.test(html),
+					html.slice(-120));
 				check('note is tagged for later filtering', note.getTags().some(t => t.tag === 'Moonlit AI'));
 			}
 		}

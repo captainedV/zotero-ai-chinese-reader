@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "moonlit-reader@dsh.local": {
+      "updates": [
+        {
+          "version": "1.4.0",
+          "update_link": "https://github.com/captainedV/zotero-ai-chinese-reader/releases/download/v1.4.0/moonlit-reader-1.4.0.xpi",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "7.0",
+              "strict_max_version": "12.99"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

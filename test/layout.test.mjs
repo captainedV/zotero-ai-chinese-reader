@@ -1,5 +1,27 @@
 import fs from 'node:fs';
-import * as pdfjs from '/tmp/pdfcheck/node_modules/pdfjs-dist/legacy/build/pdf.mjs';
+import { createRequire } from 'node:module';
+// pdf.js is a test-only dependency; resolve it from the repo, the harness cache, or an env override.
+const require = createRequire(import.meta.url);
+import path from 'node:path';
+const pdfjsCandidates = [
+	process.env.MOONLIT_PDFJS,
+	'pdfjs-dist/legacy/build/pdf.mjs',
+	'/tmp/pdfcheck/node_modules/pdfjs-dist/legacy/build/pdf.mjs',
+	path.join(import.meta.dirname, '..', 'node_modules/pdfjs-dist/legacy/build/pdf.mjs')
+].filter(Boolean);
+const resolved = pdfjsCandidates.find(candidate => {
+	try {
+		return candidate.startsWith('/') ? fs.existsSync(candidate) : !!require.resolve(candidate);
+	}
+	catch (e) {
+		return false;
+	}
+});
+if (!resolved) {
+	console.error('pdfjs-dist is required for the layout tests:  npm i -D pdfjs-dist   (or set MOONLIT_PDFJS)');
+	process.exit(1);
+}
+const pdfjs = await import(resolved.startsWith('/') ? resolved : require.resolve(resolved));
 import { loadPlugin, test, testAsync, assert, assertEqual, assertClose, summary } from './harness.mjs';
 
 const M = loadPlugin('i18n.js', 'util.js', 'layout.js', 'sentences.js', 'quotes.js');

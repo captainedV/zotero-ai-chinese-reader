@@ -1,16 +1,38 @@
 {
-  "name": "moonlit-reader",
-  "version": "1.0.0",
-  "description": "Zotero AI paper reader: sentence-aligned translation, summaries and AI key-point annotations",
+  "name": "zotero-ai-chinese-reader",
+  "version": "1.4.0",
+  "description": "Read English papers in Chinese inside Zotero: side-by-side translation, structured summary and AI key-point annotations (plugin codename: moonlit)",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node build.mjs --unpacked",
-    "test": "node test/layout.test.mjs && node test/static.test.mjs",
-    "test:ui": "node test/harness/run.mjs verify \"verify?theme=dark\"",
-    "test:live": "node test/real-api.mjs"
+    "build": "node build.mjs",
+    "test": "node test/static.test.mjs && node test/latex.test.mjs && node test/prompts-batch.test.mjs && node test/feature-state.test.mjs && node test/usage.test.mjs && node test/resilience.test.mjs && node test/ratelimit.test.mjs && node test/config-backup.test.mjs && node test/bootstrap-prefs.test.mjs",
+    "test:layout": "node test/layout.test.mjs",
+    "test:ui": "node test/harness/run.mjs verify",
+    "test:ui:dark": "node test/harness/run.mjs verify \"verify?theme=dark\"",
+    "test:live": "node test/real-api.mjs",
+    "test:all": "npm test && npm run test:layout && npm run test:ui"
   },
+  "keywords": [
+    "zotero",
+    "zotero-plugin",
+    "pdf",
+    "translation",
+    "chinese",
+    "llm",
+    "academic-paper"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/captainedV/zotero-ai-chinese-reader.git"
+  },
+  "bugs": {
+    "url": "https://github.com/captainedV/zotero-ai-chinese-reader/issues"
+  },
+  "homepage": "https://github.com/captainedV/zotero-ai-chinese-reader#readme",
   "devDependencies": {
+    "pdfjs-dist": "^5.4.149",
     "playwright-core": "^1.64.1"
   }
 }

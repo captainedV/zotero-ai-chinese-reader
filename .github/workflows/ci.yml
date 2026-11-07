@@ -1,0 +1,33 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static audit + unit tests
+        run: |
+          node test/static.test.mjs
+          node test/latex.test.mjs
+          node test/prompts-batch.test.mjs
+          node test/feature-state.test.mjs
+          node test/usage.test.mjs
+          node test/resilience.test.mjs
+          node test/ratelimit.test.mjs
+          node test/config-backup.test.mjs
+          node test/bootstrap-prefs.test.mjs
+      - name: Build the XPI
+        run: node build.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonlit-reader-xpi
+          path: dist/*.xpi
+          if-no-files-found: error
