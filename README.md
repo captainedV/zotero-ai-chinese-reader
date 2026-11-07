@@ -19,9 +19,9 @@
 
 <p align="center">
   <a href="../../releases/latest"><b>⬇️ 下载安装</b></a> ·
-  <a href="#快速上手">快速上手</a> ·
-  <a href="#自带-api任何模型随你选">自带 API</a> ·
-  <a href="#常见问题">常见问题</a> ·
+  <a href="#quick-start">快速上手</a> ·
+  <a href="#byo-api">自带 API</a> ·
+  <a href="#faq">常见问题</a> ·
   <a href="CHANGELOG.md">更新日志</a>
 </p>
 
@@ -47,6 +47,8 @@
   <sub>右栏逐段译文，悬停即与原文联动（截图为自动化审计界面）</sub>
 </p>
 
+<a id="byo-api"></a>
+
 ## 💡 自带 API，任何模型随你选
 
 插件**不绑定任何服务商**，也不经过我们任何服务器：你填自己的接口地址和 Key，论文只发给你选择的那一家。
@@ -64,6 +66,8 @@
 3. 重启 Zotero
 
 > 支持 Zotero 7 / 8 / 9 / 10（macOS、Windows、Linux）。
+
+<a id="quick-start"></a>
 
 ## ⚡ 快速上手
 
@@ -88,6 +92,8 @@
 | 每分钟请求上限 | 45 | 网关限制更严时调低，避免 429 |
 | 流式输出 | 开 | 代理拦截流式、进度卡住时关掉 |
 | 详细日志 | 关 | 需要排查问题时打开（日志在数据目录 `moonlit.log`） |
+
+<a id="faq"></a>
 
 ## ❓ 常见问题
 
