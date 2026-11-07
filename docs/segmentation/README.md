@@ -1,6 +1,8 @@
 # Segmentation: before / after the punctuation-first pass
 
-Dumps from `node test/segment-dump.mjs <pdf> --pages 8`. `before-*` is the 1.2.2
+Dumps from `node test/segment-dump.mjs <pdf> --pages 8` (paragraph text is truncated
+to ~120 characters: the excerpts are here to show the segmentation boundaries, not
+to republish the papers). `before-*` is the 1.2.2
 behaviour, `after-*` adds the punctuation-first joins, caption chains and math
 handling.
 

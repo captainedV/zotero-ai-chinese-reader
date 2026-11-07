@@ -17,6 +17,14 @@
 └───────────────────────────────────────────────┴──────────────────────┘
 ```
 
+<details>
+<summary>界面截图（自动化审计产物，合成示例 PDF）</summary>
+
+![翻译面板](docs/shots/translate.png)
+![控制面板](docs/shots/popover.png)
+
+</details>
+
 ## 功能特点
 
 | 功能 | 说明 |
