@@ -108,15 +108,16 @@
 
 		async function run() {
 			if (state.running) {
-				return;
+				return true;
 			}
 			if (!M.AI.isConfigured()) {
 				app.toast(t('toast.noKey'), 'error');
 				app.openSettings();
-				return;
+				return false;
 			}
 			state.running = true;
 			state.aborted = false;
+			let started = false;
 			syncToolbar();
 			statusLabel.textContent = t('highlight.running');
 			app.setError?.(null);
@@ -193,6 +194,7 @@
 				render();
 				statusLabel.textContent = '';
 				app.toast(t('highlight.done', { n: result.created }), 'success');
+				started = true;
 			}
 			catch (e) {
 				M.Log.error('highlight failed', e);
@@ -213,7 +215,9 @@
 					tab: 'highlight'
 				});
 				syncToolbar();
+				app.syncFeatureUi?.();
 			}
+			return started;
 		}
 
 		buildToolbar();

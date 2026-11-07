@@ -711,6 +711,55 @@
 			assertStep('translation cached to disk', Object.keys(record.translation || {}).length > 0,
 				`entries=${Object.keys(record.translation || {}).length}`);
 
+			// Switch ↔ UI alignment, on the real reader.
+			try {
+				app.setFeature('translate', false);
+				app.setFeature('summary', false);
+				app.setFeature('highlight', false);
+				app.dock.clearTasks?.();
+				app.syncFeatureUi();
+				assertStep('every feature reports off with the button neutral',
+					['translate', 'summary', 'highlight'].every(name => app.featureState(name) === 'off')
+					&& !app.button.classList.contains('ml-on'),
+					`${app.button.className}`);
+
+				// drive a real running task through the dock and watch the UI follow
+				app.dock.setTask('translate', { state: 'running', done: 3, total: 9, tab: 'translate' });
+				await M.Util.sleep(120);
+				assertStep('a running task reaches the switch state',
+					app.featureState('translate') === 'running', app.featureState('translate'));
+				assertStep('a running task reaches the toolbar button',
+					app.button.classList.contains('ml-busy'), app.button.className);
+				app.setFeature('translate', true);
+				app.dock.setTask('translate', { state: 'paused', done: 3, total: 9, tab: 'translate' });
+				await M.Util.sleep(120);
+				assertStep('a paused task keeps its numbers in the status text',
+					/3\/9/.test(app.featureStatusText('translate')), app.featureStatusText('translate'));
+				assertStep('a paused task shows up on the button',
+					app.button.classList.contains('ml-paused'), app.button.className);
+				app.dock.setTask('translate', { state: 'error', done: 0, total: 0, tab: 'translate' });
+				await M.Util.sleep(120);
+				assertStep('a failed task is not hidden behind the banner',
+					app.featureState('translate') === 'error', app.featureState('translate'));
+				app.dock.setTask('translate', null);
+				app.setFeature('translate', false);
+				await M.Util.sleep(80);
+
+				// a refused start must not leave the switch on
+				const savedKey = M.Prefs.getString('apiKey', '');
+				M.Prefs.set('apiKey', '');
+				await app.applyFeatureState('enableTranslate', true);
+				await M.Util.sleep(200);
+				assertStep('a refused start rolls the switch back',
+					app.isFeatureOn('translate') === false,
+					`flag=${app.isFeatureOn('translate')}`);
+				M.Prefs.set('apiKey', savedKey);
+				app.setFeature('translate', false);
+			}
+			catch (e) {
+				assertStep('a refused start rolls the switch back', false, e.message);
+			}
+
 			// Per-paper switch ownership and per-paper clearing.
 			try {
 				const key = app.document?.attachmentKey;

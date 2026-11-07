@@ -818,6 +818,124 @@
 		check('math rendering escapes markup from the model',
 			!M.Latex.toHtml('<img src=x onerror=1> $x^{<b>}$').includes('<img'));
 
+		// ------------------------------------------- switch ↔ UI alignment suite
+		// Two layers are verified here: (1) a real run tells the truth end to end, and
+		// (2) transient states driven straight into the dock are mirrored by the
+		// switch, the status line and the toolbar button — that mirroring is what
+		// used to drift.
+		const featureRows = () => [...doc.querySelectorAll('#moonlit-popover .ml-row[data-feature]')]
+			.map(row => ({
+				name: row.dataset.feature,
+				state: row.dataset.state,
+				checked: row.querySelector('.ml-switch')?.getAttribute('aria-checked') === 'true',
+				status: (row.querySelector('.ml-row-status')?.textContent || '').trim()
+			}));
+		const openPopover = async () => {
+			const existing = doc.getElementById('moonlit-popover');
+			if (!existing || existing.classList.contains('ml-closing')) {
+				existing?.remove();
+				app.togglePopover();
+				await waitFor(() => {
+					const pop = doc.getElementById('moonlit-popover');
+					return pop && !pop.classList.contains('ml-closing');
+				});
+			}
+			return featureRows();
+		};
+
+		app.setFeature('translate', false);
+		app.setFeature('summary', false);
+		app.setFeature('highlight', false);
+		app.dock.clearTasks?.();
+		app.syncFeatureUi();
+		let rowsNow = await openPopover();
+		check('all three rows report the same off state',
+			rowsNow.length === 3 && rowsNow.every(row => row.checked === false && row.state === 'off'),
+			JSON.stringify(rowsNow));
+		check('the toolbar button is neutral while everything is off',
+			!app.button.classList.contains('ml-on') && !app.button.classList.contains('ml-busy'),
+			app.button.className);
+
+		// (1) a real toggle starts a real run and every surface follows it
+		app.views.translate.clearTranslation();
+		await app.applyFeatureState('enableTranslate', true);
+		await waitFor(() => {
+			const state = app.featureState('translate');
+			return state === 'running' || state === 'done';
+		}, 15000);
+		rowsNow = featureRows();
+		let row = rowsNow.find(item => item.name === 'translate');
+		check('turning a switch on checks it in the open popover without reopening',
+			row?.checked === true, JSON.stringify(row));
+		check('the row follows the real run', ['running', 'done'].includes(row?.state),
+			JSON.stringify(row));
+		check('the row shows a status line with the counter',
+			!!row?.status && /\d/.test(row.status), row?.status);
+		check('the toolbar button leaves the neutral state', app.button.classList.contains('ml-on'),
+			`${app.button.className} label=${app.button.getAttribute('aria-label')}`);
+		await waitFor(() => app.dock.getTask('translate')?.state !== 'running', 25000);
+
+		// (2) transient states are mirrored exactly
+		const taskStates = [
+			[{ state: 'running', done: 5, total: 12 }, 'running', 'ml-busy'],
+			[{ state: 'paused', done: 5, total: 12 }, 'paused', 'ml-paused'],
+			[{ state: 'done', done: 12, total: 12 }, 'done', 'ml-on'],
+			[{ state: 'error', done: 0, total: 0 }, 'error', 'ml-error']
+		];
+		for (const [task, expectedState, expectedClass] of taskStates) {
+			app.dock.setTask('translate', { tab: 'translate', ...task });
+			await new Promise(resolve => setTimeout(resolve, 80));
+			rowsNow = await openPopover();
+			row = rowsNow.find(item => item.name === 'translate');
+			check(`a ${task.state} task is reported as ${expectedState}`,
+				row?.state === expectedState, JSON.stringify(row));
+			check(`the ${task.state} state reaches the toolbar button (${expectedClass})`,
+				app.button.classList.contains(expectedClass), app.button.className);
+			if (task.total) {
+				check(`the ${task.state} row shows ${task.done}/${task.total}`,
+					row.status.includes(`${task.done}/${task.total}`) || row.status.includes(String(task.done)),
+					row.status);
+			}
+		}
+
+		// a paused feature that is switched off still shows its numbers
+		app.dock.setTask('translate', { state: 'paused', done: 5, total: 12, tab: 'translate' });
+		app.setFeature('translate', false, { user: true });
+		await new Promise(resolve => setTimeout(resolve, 80));
+		rowsNow = featureRows();
+		row = rowsNow.find(item => item.name === 'translate');
+		check('an unchecked switch with paused work still reports paused',
+			row?.state === 'paused' && row.checked === false, JSON.stringify(row));
+
+		// a refused start never leaves the switch on (mock counts as configured, so
+		// switch to a real provider without a key for this check only)
+		const savedProvider = M.Prefs.getString('provider', 'mock');
+		const savedKey = M.Prefs.getString('apiKey', '');
+		M.Prefs.set('provider', 'openai');
+		M.Prefs.set('apiKey', '');
+		app.dock.setTask('translate', null);
+		app.setFeature('translate', false);
+		await app.applyFeatureState('enableTranslate', true);
+		await new Promise(resolve => setTimeout(resolve, 200));
+		check('a refused start leaves the switch off instead of lying',
+			app.isFeatureOn('translate') === false,
+			`flag=${app.isFeatureOn('translate')} state=${app.featureState('translate')}`);
+		check('a refused start does not leave a running row',
+			app.featureState('translate') !== 'running', String(app.featureState('translate')));
+		M.Prefs.set('provider', savedProvider);
+		M.Prefs.set('apiKey', savedKey);
+
+		// a user toggle bumps the epoch, so a slow flag load cannot undo it
+		const epochBefore = app.flagEpoch;
+		app.setFeature('summary', true, { user: true });
+		check('a user toggle bumps the epoch so a stale load is discarded',
+			app.flagEpoch > epochBefore, `${epochBefore} → ${app.flagEpoch}`);
+		app.setFeature('summary', false, { user: true });
+		app.dock.setTask('translate', null);
+		if (doc.getElementById('moonlit-popover')) {
+			app.togglePopover();
+		}
+
 		// --------------------------------------------------- highlight default
 		check('AI key points default to off', window.__prefsAtBoot?.enableHighlight === false,
 			String(window.__prefsAtBoot?.enableHighlight));

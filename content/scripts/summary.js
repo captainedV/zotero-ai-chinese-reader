@@ -158,15 +158,16 @@
 
 		async function generate({ force = false } = {}) {
 			if (state.running) {
-				return;
+				return true;
 			}
 			if (!M.AI.isConfigured()) {
 				app.toast(t('toast.noKey'), 'error');
 				app.openSettings();
-				return;
+				return false;
 			}
 			state.running = true;
 			state.aborted = false;
+			let started = false;
 			syncToolbar();
 			statusLabel.textContent = t('summary.generating');
 			try {
@@ -201,6 +202,7 @@
 				M.Cache.save(app.document.attachmentKey, record);
 				statusLabel.textContent = '';
 				app.toast(t('summary.done'), 'success');
+				started = true;
 			}
 			catch (e) {
 				M.Log.error('summary failed', e);
@@ -223,7 +225,9 @@
 					total: 1,
 					tab: 'summary'
 				});
+				app.syncFeatureUi?.();
 			}
+			return started;
 		}
 
 		async function runPipeline(signal) {

@@ -766,22 +766,22 @@
 				// when the current run finishes.
 				state.restartRequested = true;
 				M.Log.info('translate: start requested while a run is finishing; will continue after it');
-				return;
+				return true;
 			}
 			state.nonStream = false;
 			if (!M.AI.isConfigured()) {
 				app.toast(t('toast.noKey'), 'error');
 				app.openSettings();
-				return;
+				return false;
 			}
 			if (!app.document) {
 				app.toast(t('toast.noText'), 'error');
-				return;
+				return false;
 			}
 			const pending = pendingUnits();
 			if (!pending.length) {
 				app.toast(t('translate.done'), 'success');
-				return;
+				return true;
 			}
 			state.running = true;
 			state.started = true;

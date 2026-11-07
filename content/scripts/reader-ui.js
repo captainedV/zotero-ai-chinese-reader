@@ -84,18 +84,57 @@
 
 		const features = M.Dom.h(doc, 'div');
 		features.appendChild(M.Dom.h(doc, 'div', { class: 'ml-section-label', text: t('section.features') }));
+		// One row per feature: switch on the right, live status underneath. The status
+		// line is the thing that keeps "what the switch says" and "what is happening"
+		// visibly identical instead of leaving the user to guess.
+		app.popoverRows = [];
 		for (const row of rows) {
-			const sw = M.Dom.switchControl(doc, app.isFeatureOn(FEATURE_BY_KEY[row.key] || 'translate'), async (value) => {
+			const name = FEATURE_BY_KEY[row.key] || 'translate';
+			const title = M.Dom.h(doc, 'div', { class: 'ml-row-title', text: row.title });
+			const desc = M.Dom.h(doc, 'div', { class: 'ml-row-desc', text: row.desc });
+			const statusEl = M.Dom.h(doc, 'div', { class: 'ml-row-status', text: '' });
+			const resumeBtn = M.Dom.button(doc, {
+				class: 'ml-mini ml-row-resume',
+				label: t('feature.resume'),
+				onClick: () => {
+					app.applyFeatureState(row.key, app.isFeatureOn(name) ? false : true);
+				}
+			});
+			resumeBtn.hidden = true;
+			const sw = M.Dom.switchControl(doc, app.isFeatureOn(name), async (value) => {
 				await app.applyFeatureState(row.key, value);
 			});
-			features.appendChild(M.Dom.h(doc, 'div', { class: 'ml-row' }, [
-				M.Dom.h(doc, 'div', { class: 'ml-row-text' }, [
-					M.Dom.h(doc, 'div', { class: 'ml-row-title', text: row.title }),
-					M.Dom.h(doc, 'div', { class: 'ml-row-desc', text: row.desc })
-				]),
-				sw
-			]));
+			const rowEl = M.Dom.h(doc, 'div', { class: 'ml-row', attrs: { 'data-feature': name } }, [
+				M.Dom.h(doc, 'div', { class: 'ml-row-text' }, [title, desc, statusEl]),
+				M.Dom.h(doc, 'div', { class: 'ml-row-side' }, [resumeBtn, sw])
+			]);
+			features.appendChild(rowEl);
+			app.popoverRows.push({ key: row.key, name, sw, statusEl, desc, resumeBtn, rowEl });
 		}
+
+		/**
+		 * Re-paint the switch and the status line from the model. Called on every
+		 * task change and every toggle, so the popover cannot drift while it is open.
+		 */
+		app.refreshPopoverRows = () => {
+			const rowsInDom = app.popoverRows || [];
+			for (const row of rowsInDom) {
+				if (!row.sw || !row.sw.isConnected) {
+					continue;
+				}
+				const on = app.isFeatureOn(row.name);
+				row.sw.setAttribute('aria-checked', on ? 'true' : 'false');
+				const state = app.featureState(row.name);
+				row.rowEl.setAttribute('data-state', state);
+				row.rowEl.classList.toggle('ml-row-on', on);
+				row.statusEl.textContent = app.featureStatusText(row.name);
+				row.statusEl.className = `ml-row-status ml-row-status-${state}`;
+				row.desc.style.display = state === 'off' ? '' : 'none';
+				row.resumeBtn.hidden = !(state === 'paused' || (state === 'off' && on));
+				row.resumeBtn.textContent = state === 'paused' ? t('feature.resume') : t('feature.start');
+			}
+		};
+		app.popoverRows = app.popoverRows || [];
 
 		const status = M.Dom.h(doc, 'div', {
 			class: `ml-status${provider.ready ? '' : ' ml-warn'}`
@@ -122,6 +161,8 @@
 		// no extra "generate" buttons live here.
 		pop.append(head, features, M.Dom.h(doc, 'div', { class: 'ml-hint', text: t('section.features.hint') }), status);
 		doc.body.appendChild(pop);
+		// Only now are the rows in the document: refresh checks `isConnected`.
+		app.refreshPopoverRows();
 
 		const onOutside = (event) => {
 			if (!pop.contains(event.target) && !event.target.closest?.(`.${BUTTON_CLASS}`)) {
@@ -146,6 +187,8 @@
 	}
 
 	function closePopover(app) {
+		// Debug breadcrumb: which code path dismissed the popover.
+		app.lastPopoverClose = (new Error().stack || '').split('\n').slice(1, 4).join(' | ');
 		const pop = app.doc?.getElementById?.(POPOVER_ID);
 		app.popoverCleanup?.();
 		if (!pop) {
@@ -320,12 +363,16 @@
 		 * flags in its cache record; a paper that has never been used starts off.
 		 */
 		app.featureFlags = { translate: false, summary: false, highlight: false };
+		/** Bumped on every user toggle, so a slow flag load cannot undo a click. */
+		app.flagEpoch = 0;
+		app.flagsLoaded = false;
 
 		app.isFeatureOn = name => !!app.featureFlags?.[name];
 
 		app.anyFeatureOn = () => Object.values(app.featureFlags || {}).some(Boolean);
 
 		app.loadFeatureFlags = async () => {
+			const epochAtStart = app.flagEpoch;
 			let flags = { translate: false, summary: false, highlight: false };
 			try {
 				const attachment = Zotero.Items.get(reader.itemID);
@@ -344,8 +391,17 @@
 			catch (e) {
 				M.Log.debug('feature flags load failed', e);
 			}
-			app.featureFlags = flags;
-			return flags;
+			// The user may have clicked a switch while the record was loading: their
+			// choice wins, otherwise the switch would silently flip back.
+			if (app.flagEpoch === epochAtStart) {
+				app.featureFlags = flags;
+			}
+			else {
+				M.Log.debug('feature flags: keeping the user choice made during load');
+			}
+			app.flagsLoaded = true;
+			app.syncFeatureUi();
+			return app.featureFlags;
 		};
 
 		app.saveFeatureFlags = async () => {
@@ -357,18 +413,85 @@
 				const record = app.record || await M.Cache.load(key);
 				record.enabled = { ...app.featureFlags };
 				app.record = record;
+				// Flush quickly: a switch flipped right before Zotero closes must survive.
 				M.Cache.save(key, record);
+				setTimeout(() => M.Cache.flush(key).catch(() => {}), 250);
 			}
 			catch (e) {
 				M.Log.debug('feature flags save failed', e);
 			}
 		};
 
+		/**
+		 * What the UI should show for one feature.
+		 *
+		 * The switch is the user's intent; the dock task is what is actually
+		 * happening. Deriving a single state from both is what keeps them aligned.
+		 */
+		app.featureState = (name) => {
+			const on = app.isFeatureOn(name);
+			const task = app.dock?.getTask?.(name) || null;
+			const running = task?.state === 'running';
+			if (running) {
+				return 'running';
+			}
+			if (task?.state === 'error') {
+				return 'error';
+			}
+			if (!on) {
+				return task?.state === 'paused' ? 'paused' : 'off';
+			}
+			if (task?.state === 'paused') {
+				return 'paused';
+			}
+			if (task?.state === 'done') {
+				return 'done';
+			}
+			return 'ready';
+		};
+
+		/** Human-readable status line for one feature row. */
+		app.featureStatusText = (name) => {
+			const state = app.featureState(name);
+			const task = app.dock?.getTask?.(name) || null;
+			const progress = task && task.total
+				? ` · ${Math.min(task.done || 0, task.total)}/${task.total}`
+				: '';
+			switch (state) {
+				case 'running': return t('feature.running') + progress;
+				case 'paused': return t('feature.paused') + progress;
+				case 'done': return t('feature.done') + progress;
+				case 'error': return t('feature.error') + progress;
+				case 'ready': return t('feature.ready');
+				default: return t('feature.off');
+			}
+		};
+
+		/** Push the model to every place that displays it. */
+		app.syncFeatureUi = () => {
+			try {
+				app.setButtonState?.();
+				app.refreshPopoverRows?.();
+			}
+			catch (e) {
+				M.Log.debug('syncFeatureUi failed', e);
+			}
+		};
+
 		/** Set one paper's switch without running anything (tests, restore). */
-		app.setFeature = (name, value) => {
-			app.featureFlags = { ...(app.featureFlags || {}), [name]: !!value };
-			app.setButtonState?.();
+		app.setFeature = (name, value, { user = false } = {}) => {
+			const next = !!value;
+			if (app.featureFlags?.[name] === next) {
+				app.syncFeatureUi();
+				return next;
+			}
+			app.featureFlags = { ...(app.featureFlags || {}), [name]: next };
+			if (user) {
+				app.flagEpoch += 1;
+			}
+			app.syncFeatureUi();
 			app.saveFeatureFlags();
+			return next;
 		};
 
 		app.applyFeatureState = async (key, value) => {
@@ -382,13 +505,18 @@
 				return;
 			}
 			const featureName = FEATURE_BY_KEY[key] || entry.tab;
-			app.setFeature(featureName, !!value);
+			app.setFeature(featureName, !!value, { user: true });
 			if (value) {
 				// Turning a switch on is the entry point for the feature, so it has to
 				// start the work: opening an empty tab and waiting for a second click is
 				// exactly what looks like "nothing happens".
-				await app.runFeature(entry.tab);
-				app.setButtonState();
+				const started = await app.runFeature(entry.tab);
+				if (!started) {
+					// Refused (no key / no text): do not leave the switch lying about it.
+					app.setFeature(featureName, false);
+					entry.view?.deactivate?.();
+				}
+				app.syncFeatureUi();
 			}
 			else {
 				entry.view?.deactivate?.();
@@ -399,29 +527,38 @@
 			}
 		};
 
+		/**
+		 * Start a feature. Returns true when it is running (or already complete).
+		 *
+		 * A switch that flips on but cannot run — no API key, scanned PDF — used to
+		 * stay on forever, which is exactly the "switch says on, nothing happens"
+		 * mismatch. The caller rolls the switch back when this returns false.
+		 */
 		app.runFeature = async (name) => {
+			let started = false;
 			if (name === 'summary') {
 				app.setFeature('summary', true);
 				app.dock.open('summary');
 				// A cached summary for the same language is reused; `force` stays off so
 				// flipping the switch does not burn tokens again.
-				await app.views.summary.generate({ force: false });
+				started = await app.views.summary.generate({ force: false });
 			}
 			else if (name === 'translate') {
 				app.setFeature('translate', true);
 				app.dock.open('translate');
 				await app.views.translate.activate();
-				app.views.translate.start();
+				started = await app.views.translate.start();
 			}
 			else if (name === 'highlight') {
 				app.setFeature('highlight', true);
 				app.dock.open('highlight');
 				await app.views.highlight.activate();
-				if (!app.views.highlight.points?.length) {
-					await app.views.highlight.run();
-				}
+				started = app.views.highlight.points?.length
+					? true
+					: await app.views.highlight.run();
 			}
-			app.setButtonState?.();
+			app.syncFeatureUi();
+			return started !== false;
 		};
 
 		/**
@@ -470,16 +607,44 @@
 				return;
 			}
 			const anyOn = app.anyFeatureOn();
+			const states = ['translate', 'summary', 'highlight'].map(name => app.featureState?.(name) || 'off');
+			const running = states.includes('running') || app.busyCount > 0;
+			const paused = states.includes('paused');
+			const failed = states.includes('error');
 			button.classList.toggle('ml-on', anyOn);
-			button.classList.toggle('ml-busy', app.busyCount > 0);
+			button.classList.toggle('ml-busy', running);
+			button.classList.toggle('ml-paused', paused && !running);
+			button.classList.toggle('ml-error', failed);
 			button.classList.toggle('ml-open', !!doc.getElementById(POPOVER_ID));
+			const label = failed
+				? t('button.state.error')
+				: running
+					? t('button.state.running')
+					: paused
+						? t('button.state.paused')
+						: anyOn ? t('button.state.on') : t('button.state.off');
+			button.setAttribute('aria-label', label);
+			button.setAttribute('title', label);
+		};
+
+		/**
+		 * The dock is the source of truth for what is running; mirror it into the
+		 * button and the popover the moment it changes.
+		 */
+		app.onTaskChange = () => {
+			app.syncFeatureUi();
 		};
 
 		app.togglePopover = () => {
-			if (doc.getElementById(POPOVER_ID)) {
+			const existing = doc.getElementById(POPOVER_ID);
+			if (existing && !existing.classList.contains('ml-closing')) {
 				closePopover(app);
 				return;
 			}
+			// A popover that is fading out must not block reopening it: the close
+			// animation leaves the element in the DOM for 140 ms.
+			existing?.remove();
+			app.popoverCleanup?.();
 			buildPopover(app);
 			app.setButtonState();
 		};

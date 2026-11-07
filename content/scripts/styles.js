@@ -690,6 +690,70 @@ button.ml-tab .ml-tab-count {
   overflow: hidden;
 }
 
+/* Popover feature rows: switch + live status, so intent and reality are visible
+   in the same glance. */
+.ml-row {
+  align-items: flex-start;
+}
+
+.ml-row-on .ml-row-title {
+  color: var(--ml-ink);
+}
+
+.ml-row-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.ml-row-status {
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ml-ink-3, var(--ml-ink-2, #777));
+  font-variant-numeric: tabular-nums;
+}
+
+.ml-row-status-running {
+  color: var(--ml-amber-ink, var(--ml-amber));
+}
+
+.ml-row-status-paused {
+  color: var(--ml-ink-2, #555);
+}
+
+.ml-row-status-done {
+  color: var(--ml-green, #34a853);
+}
+
+.ml-row-status-error {
+  color: var(--ml-red, #d93025);
+}
+
+.ml-row-resume {
+  font-size: 11px;
+  padding: 3px 9px;
+  min-height: 0;
+}
+
+/* Toolbar button states beyond on/off. */
+#moonlit-toolbar-button.ml-paused {
+  box-shadow: inset 0 0 0 1.5px var(--ml-amber);
+  opacity: 0.9;
+}
+
+#moonlit-toolbar-button.ml-error::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ml-red, #d93025);
+}
+
 /* The clear buttons ask for a second click before destroying work. */
 .ml-icon-btn.ml-armed {
   color: var(--ml-red, #d93025);

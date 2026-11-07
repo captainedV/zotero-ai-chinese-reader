@@ -503,6 +503,8 @@
 			if (!taskList) {
 				return;
 			}
+			// A failed task keeps its row: the sticky banner carries the reason, the row
+			// keeps the feature's state visible so the switch and the row agree.
 			const tasks = [...state.tasks.values()].filter(task => task.state !== 'idle');
 			if (!tasks.length) {
 				taskList.hidden = true;
@@ -585,6 +587,12 @@
 			if (patch === null) {
 				state.tasks.delete(id);
 				renderTasks();
+				try {
+					app.onTaskChange?.(id, null);
+				}
+				catch (e) {
+					M.Log.debug('task change hook failed', e);
+				}
 				return;
 			}
 			const previous = state.tasks.get(id) || { id, done: 0, total: 0, state: 'idle' };
@@ -592,7 +600,7 @@
 			if (previous.doneTimer) {
 				clearTimeout(previous.doneTimer);
 			}
-			if (next.state === 'idle' || next.state === 'error') {
+			if (next.state === 'idle') {
 				state.tasks.delete(id);
 			}
 			else {
@@ -610,6 +618,13 @@
 				state.tasks.set(id, next);
 			}
 			renderTasks();
+			// Let the reader UI mirror the change (button state, popover rows).
+			try {
+				app.onTaskChange?.(id, state.tasks.get(id) || null);
+			}
+			catch (e) {
+				M.Log.debug('task change hook failed', e);
+			}
 		}
 
 		function renderUsage(next) {
