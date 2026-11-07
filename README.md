@@ -142,9 +142,9 @@ npm run build     # 产出 dist/moonlit-reader-<version>.xpi
 
 ## 🤖 关于本项目
 
-本插件的**全部代码、界面与文档均由 AI 协作完成**：由 **DSH**（DeepSeek Harness）驱动
-**DeepSeek V4.1 Flash** 编写实现、自测与迭代，人类负责提出需求、审阅与验收。
-从版面解析、翻译调度到图标绘制，整个开发过程就是一次长时间的 agentic coding 实验。
+本插件的**全部代码、界面、图标与文档均由 AI 完成**：由 **DSH**（DeepSeek Harness）驱动
+**DS4.1 Flash**（DeepSeek V4.1 Flash）编写、自测并迭代，人类负责提出需求、审阅与验收。
+从版面解析、翻译调度、开关状态机到图标绘制，整个过程就是一次长时间的 agentic coding 实验。
 
 ## 📄 许可
 
