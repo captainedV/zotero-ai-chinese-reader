@@ -5,3 +5,4 @@ dist/
 /tmp/
 *.log
 test/harness/shots/
+docs/shots/
