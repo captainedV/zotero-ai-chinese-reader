@@ -185,6 +185,34 @@
 		};
 	}
 
+	/**
+	 * The size most of a line's characters are set in.
+	 *
+	 * A median over runs lets one inline formula or superscript drag the whole line
+	 * to another size, which then reads as "different font ⇒ new paragraph" and cuts
+	 * a paragraph in half — the caption bug reported against Figure 1 of the R1 paper.
+	 */
+	function dominantFontSize(items) {
+		const weight = new Map();
+		for (const item of items) {
+			const key = Math.round((item.fontSize || 0) * 20) / 20;
+			if (!key) {
+				continue;
+			}
+			const chars = String(item.text || '').replace(/\s+/g, '').length || 1;
+			weight.set(key, (weight.get(key) || 0) + chars);
+		}
+		let best = 0;
+		let bestWeight = -1;
+		for (const [size, chars] of weight) {
+			if (chars > bestWeight) {
+				bestWeight = chars;
+				best = size;
+			}
+		}
+		return best || 0;
+	}
+
 	function median(values) {
 		const sorted = values.slice().sort((a, b) => a - b);
 		const mid = Math.floor(sorted.length / 2);
@@ -267,7 +295,7 @@
 				lines.push({
 					text,
 					rect: roundRect(rect),
-					fontSize: Math.round(median(items.map(item => item.fontSize)) * 100) / 100,
+					fontSize: dominantFontSize(items),
 					baseline: group.baseline,
 					items
 				});
@@ -443,8 +471,10 @@
 	function isProbablySameParagraph(prev, next, medianHeight) {
 		const gap = lineGap(prev, next);
 		const sizeDelta = Math.abs(prev.fontSize - next.fontSize);
-		// Superscripts and inline math shift the measured line height a little.
-		if (sizeDelta > Math.max(1.2, medianHeight * 0.18)) {
+		// Superscripts and inline math shift the measured line height a little. Only a
+		// real style change (heading vs body) splits a paragraph, so the tolerance is
+		// generous and relaxed further when the geometry says "same paragraph".
+		if (sizeDelta > Math.max(2, medianHeight * 0.3)) {
 			return false;
 		}
 		const prevText = String(prev.text || '').trimEnd();
@@ -593,7 +623,10 @@
 	// geometry into that judgement.
 
 	const SECTION_RE = /^(?:\d+(?:\.\d+)*\.?\s*)?(abstract|introduction|background|related\s+work|preliminar|motivation|method|methods|approach|model|architecture|training|experiment|experiments|setup|results?|evaluation|analysis|ablation|discussion|limitations?|conclusion|future\s+work|references?|bibliography|appendix|acknowledg|摘要|引言|绪论|相关工作|方法|模型|实验|结果|评估|讨论|结论|参考文献|致谢)/i;
-	const CAPTION_RE = /^\s*(fig(?:ure)?\.?|tab(?:le)?\.?|algorithm|listing|scheme|chart|图|表)\s*\.?\s*(?:\d+[.:]?)?\s*/i;
+	// "Figure 1 | (a) AIME …" and "Table 2: Ablation …" are captions; "Figure 1(a)
+	// depicts …" is body text that merely points at a figure, so the marker has to be
+	// followed by a separator.
+	const CAPTION_RE = /^\s*(fig(?:ure)?|tab(?:le)?|algorithm|listing|scheme|chart|图|表)\.?\s*\d*[a-z]?(?:\s*\([a-z0-9]\))?\s*[|:.\-–—]\s+\S/i;
 	const TABLE_CAPTION_RE = /^\s*(tab(?:le)?\.?|表)\s*\.?\s*(?:\d+[.:]?)?/i;
 	const DOT_LEADER_RE = /(\.{3,}|…{2,})\s*\d{1,4}\s*$|\s{3,}\d{1,4}\s*$/;
 	const MATH_CHARS_RE = /[=+×÷−∑∏∫√≤≥≈∝∈∂∇∞αβγδεζηθικλμνξπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ^_{}|<>→←↔]/g;
@@ -910,7 +943,95 @@
 	 * @param {Object[]} pages pages from `buildPage`, already annotated
 	 * @returns {Object[]} the canonical paragraph list
 	 */
+	/** Prose we translate: body text, abstract lines, captions, keyword lines. */
+	function isProseish(paragraph) {
+		if (!paragraph || paragraph.translatable === false) {
+			return false;
+		}
+		const role = paragraph.role || 'body';
+		return role === 'body' || role === 'abstract' || role === 'keywords'
+			|| role === 'figure-caption' || role === 'table-caption';
+	}
+
+	/** Words that cannot end a sentence, so the next words belong to it. */
+	const HANGING_END_RE = /\b(and|or|of|in|to|the|a|an|with|for|by|as|that|which|who|whom|whose|is|are|was|were|be|been|being|we|our|it|its|their|this|these|those|from|on|at|than|while|but|so|into|over|under|between|among|via|per|not|no|also|where|when|which)$/i;
+
+	/**
+	 * Does `next` look like the rest of `current`'s sentence?
+	 *
+	 * Punctuation first, geometry second: a paragraph that has not finished its
+	 * sentence continues in the next block far more often than a geometric guess
+	 * suggests. This is what links a caption's first line to its wrapped second line,
+	 * or "…objective feedback on" to "correctness." on the next line.
+	 */
+	function continuesSentence(current, next) {
+		if (!current || !next) {
+			return false;
+		}
+		if (endsSentence(current.text)) {
+			return false;
+		}
+		const role = next.role || 'body';
+		if (role === 'heading' || role === 'title' || role === 'toc' || role === 'pageNoise') {
+			return false;
+		}
+		const nextText = String(next.text || '').trim();
+		if (!nextText) {
+			return false;
+		}
+		// A new caption, a numbered section or a table row starts something new.
+		if (CAPTION_RE.test(nextText) || hasNumbering(nextText) || SECTION_RE.test(nextText)) {
+			return false;
+		}
+		const currentText = String(current.text || '').trim();
+		const softStart = /^[a-zà-ÿ,;:)\]}]/.test(nextText);
+		const hyphen = /[A-Za-z]-$/.test(currentText);
+		const hanging = HANGING_END_RE.test(currentText);
+		const sameLeft = Math.abs((current.rect?.[0] ?? 0) - (next.rect?.[0] ?? 0))
+			<= Math.max(4, (current.fontSize || 10) * 0.8);
+		const shortLine = nextText.length <= 60;
+		return softStart || hyphen || hanging || sameLeft || shortLine;
+	}
+
 	function mergeBrokenSentences(pages) {
+		// Pass 0 — punctuation first. A caption or paragraph whose sentence is not
+		// finished continues in the next prose block, even when a wrapped line was
+		// indented, landed in the neighbouring column, or a figure label sorted in
+		// between (the Figure 1 caption of the R1 paper).
+		for (const page of pages) {
+			const paragraphs = page.paragraphs || [];
+			for (let i = 0; i < paragraphs.length; i++) {
+				const current = paragraphs[i];
+				if (!isProseish(current) || endsSentence(current.text)) {
+					continue;
+				}
+				let j = i + 1;
+				let fragments = 0;
+				while (j < paragraphs.length && !isProseish(paragraphs[j]) && fragments < 4) {
+					j++;
+					fragments++;
+				}
+				const next = paragraphs[j];
+				if (!next || !continuesSentence(current, next)) {
+					continue;
+				}
+				const hyphenated = /[A-Za-z]-$/.test(current.text.trim());
+				current.text = (hyphenated
+					? `${current.text.replace(/-$/, '')}${next.text.trim()}`
+					: `${current.text.trim()} ${next.text.trim()}`).replace(/\s{2,}/g, ' ').trim();
+				current.rects = (current.rects || []).concat(next.rects || []);
+				current.rect = unionRect(current.rects);
+				current.lines = (current.lines || []).concat(next.lines || []);
+				current.joined = (current.joined || 0) + 1;
+				// The merged block keeps the caption role if either half was a caption.
+				if (next.role === 'figure-caption' || next.role === 'table-caption') {
+					current.role = current.role === 'body' ? next.role : current.role;
+				}
+				paragraphs.splice(j, 1);
+				i--; // the same paragraph may continue again
+			}
+		}
+
 		// Pass 1 — inside a page, a sentence that runs from the bottom of one column
 		// into the top of the next arrives as two paragraphs. Join them when nothing
 		// (figure, table, heading) sits between and the second half starts mid-sentence.

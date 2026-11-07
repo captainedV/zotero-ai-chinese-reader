@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Moonlit Reader — AI 论文阅读助手",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "为 Zotero 阅读器打造的 AI 阅读伴侣：全文逐句对照翻译、论文总结、AI 重点标注。",
   "author": "Moonlit Reader",
   "icons": {

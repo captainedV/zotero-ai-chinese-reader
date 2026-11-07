@@ -1,12 +1,12 @@
 # Segmentation dump: DeepSeek-V2.pdf
 
 - pages: 8 / 52
-- paragraphs (canonical): 115
-- page-break joins: 3
-- translatable: 35
+- paragraphs (canonical): 110
+- page-break joins: 2
+- translatable: 33
 - body font size: 10.9
-- extract time: 108 ms
-- font tiers: body=10.9 h1=15.9 h2=14.9 h3=13
+- extract time: 101 ms
+- font tiers: body=10.9 h1=16 h2=15 h3=13
 
 Legend: `T` = translated, `·` = skipped. Roles: title/author/heading/abstract/body/
 figure-caption/table-caption/keywords are translated; table/formula/toc/
@@ -14,19 +14,19 @@ figure-data/pageNoise/footnote/meta are not.
 
 ## Page 1 (two columns)
 
-[  1] T `title         ` p1 · 15.9pt · 2 lines
+[  1] T `title         ` p1 · 16pt · 2 lines
       DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model
 
 [  2] · `author        ` p1 · 11pt · 2 lines
       DeepSeek-AI research@deepseek.com
 
-[  3] T `heading       ` p1 · 14.9pt · 1 lines
+[  3] T `heading       ` p1 · 15pt · 1 lines
       Abstract
 
 [  4] T `abstract      ` p1 · 11pt · 14 lines
       We present DeepSeek-V2, a strong Mixture-of-Experts (MoE) language model characterized by economical training and efficient inference. It comprises 236B total parameters, of which 21B are activated for each token, and supports a context length of 128K tokens. DeepSeek-V2 adopts innovative architectures including Multi-head Latent Attention (MLA) and DeepSeekMoE. MLA guarantees efficient inference through significantly compressing the Key-Value (KV) cache into a latent vector, while DeepSeekMoE enables training strong models at an economical cost through sparse computation. Compared with DeepSeek 67B, DeepSeek-V2 achieves significantly stronger performance, and meanwhile saves 42.5% of training costs, reduces the KV cache by 93.3%, and boosts the maximum generation throughput to 5.76 times. We pretrain DeepSeek-V2 on a high-quality and multi-source corpus consisting of 8.1T tokens, and further perform Supervised Fine-Tuning (SFT) and Reinforcement Learning (RL) to fully unlock its potential. Evaluation results show that, even with only 21B activated parameters, DeepSeek-V2 and its chat versions still achieve top-tier performance among open-source models. The model checkpoints are available at https://github.com/deepseek-ai/DeepSeek-V2.
 
-[  5] · `figure-data   ` p1 · 7.2pt · 1 lines
+[  5] · `figure-data   ` p1 · 6.4pt · 1 lines
       80 DeepSeek-V2
 
 [  6] · `figure-data   ` p1 · 6.4pt · 1 lines
@@ -68,7 +68,7 @@ figure-data/pageNoise/footnote/meta are not.
 [ 18] · `figure-data   ` p1 · 6.4pt · 1 lines
       Command R
 
-[ 19] · `table         ` p1 · 7.2pt · 1 lines
+[ 19] · `table         ` p1 · 6.4pt · 1 lines
       65 LLaMA 3 8B
 
 [ 20] · `figure-data   ` p1 · 6.4pt · 1 lines
@@ -80,8 +80,8 @@ figure-data/pageNoise/footnote/meta are not.
 [ 22] · `figure-data   ` p1 · 5.1pt · 1 lines
       LLaMA 1 Family
 
-[ 23] · `figure-data   ` p1 · 6.4pt · 1 lines
-      Mistral 7B
+[ 23] · `figure-data   ` p1 · 7.3pt · 2 lines
+      Mistral 7B 60
 
 [ 24] · `figure-data   ` p1 · 5.1pt · 3 lines
       LLaMA 2 Family LLaMA 3 Family Mixtral Family
@@ -294,12 +294,12 @@ figure-data/pageNoise/footnote/meta are not.
 [ 90] T `body          ` p6 · 10.9pt · 1 lines
       Appendix D.2.
 
-[ 91] T `body          ` p6 · 10.9pt · 4 lines · continues on the next page
-      2.1.1. Preliminaries: Standard Multi-Head Attention We first introduce the standard MHA mechanism as background. Let 𝑑 be the embedding dimension, 𝑛ℎ be the number of attention heads, 𝑑ℎ be the dimension per head, and h𝑡 ∈ R𝑑 be the attention input of the 𝑡-th token at an attention layer. Standard MHA first produces tion (GQA), Multi-Query Attention (MQA), and Multi-head Latent Attention (MLA). Through jointly compressing the keys and values into a latent vector, MLA significantly reduces the KV cache during inference.
+[ 91] T `body          ` p6 · 10.9pt · 5 lines
+      2.1.1. Preliminaries: Standard Multi-Head Attention We first introduce the standard MHA mechanism as background. Let 𝑑 be the embedding dimension, 𝑛ℎ be the number of attention heads, 𝑑ℎ be the dimension per head, and h𝑡 ∈ R𝑑 be the attention input of the 𝑡-th token at an attention layer. Standard MHA first produces q𝑡 , k𝑡 , v𝑡 ∈ R𝑑ℎ 𝑛ℎ through three matrices 𝑊𝑄 , 𝑊 𝐾 , 𝑊𝑉 ∈ R𝑑ℎ 𝑛ℎ ×𝑑 , respectively:
 
 ## Page 7 (two columns)
 
-[ 92] · `figure-data   ` p7 · 7.3pt · 1 lines
+[ 92] · `figure-data   ` p7 · 7.4pt · 1 lines
       Multi-Head Attention (MHA) Grouped-Query Attention (GQA) Multi-Query Attention (MQA) Multi-Head Latent Attention (MLA)
 
 [ 93] · `figure-data   ` p7 · 6.9pt · 1 lines
@@ -314,8 +314,8 @@ figure-data/pageNoise/footnote/meta are not.
 [ 96] · `figure-data   ` p7 · 6.9pt · 1 lines
       Queries
 
-[ 97] T `figure-caption` p7 · 10.9pt · 1 lines
-      Figure 3 | Simplified illustration of Multi-Head Attention (MHA), Grouped-Query Atten-
+[ 97] T `figure-caption` p7 · 10.9pt · 4 lines
+      Figure 3 | Simplified illustration of Multi-Head Attention (MHA), Grouped-Query Attention (GQA), Multi-Query Attention (MQA), and Multi-head Latent Attention (MLA). Through jointly compressing the keys and values into a latent vector, MLA significantly reduces the KV cache during inference.
 
 [ 98] · `figure-data   ` p7 · 6.1pt · 1 lines
       projection
@@ -323,61 +323,43 @@ figure-data/pageNoise/footnote/meta are not.
 [ 99] · `figure-data   ` p7 · 6.9pt · 2 lines
       Compressed Latent KV
 
-[100] T `body          ` p7 · 10.9pt · 3 lines · (continuation of a paragraph from the previous page)
-      tion (GQA), Multi-Query Attention (MQA), and Multi-head Latent Attention (MLA). Through jointly compressing the keys and values into a latent vector, MLA significantly reduces the KV cache during inference.
-
-[101] T `body          ` p7 · 10.9pt · 1 lines
+[100] T `body          ` p7 · 10.9pt · 1 lines
       Then, q𝑡 , k𝑡 , v𝑡 will be sliced into 𝑛ℎ heads for the multi-head attention computation:
 
-[102] T `body          ` p7 · 10.9pt · 1 lines
-      where q𝑡,𝑖, k𝑡,𝑖, v𝑡,𝑖 ∈ R𝑑ℎ denote the query, key, and value of the 𝑖-th attention head, respectively;
+[101] T `body          ` p7 · 10.9pt · 5 lines
+      where q𝑡,𝑖, k𝑡,𝑖, v𝑡,𝑖 ∈ R𝑑ℎ denote the query, key, and value of the 𝑖-th attention head, respectively; 𝑊𝑂 ∈ R𝑑×𝑑ℎ 𝑛ℎ denotes the output projection matrix. During inference, all keys and values need to be cached to accelerate inference, so MHA needs to cache 2𝑛ℎ𝑑ℎ𝑙 elements for each token. In model deployment, this heavy KV cache is a large bottleneck that limits the maximum batch size and sequence length.
 
-[103] · `figure-data   ` p7 · 7.3pt · 1 lines
-      𝑊𝑂 ∈ R𝑑×𝑑ℎ 𝑛ℎ denotes the output projection matrix. During inference, all keys and values need
-
-[104] T `body          ` p7 · 10.5pt · 3 lines
-      to be cached to accelerate inference, so MHA needs to cache 2𝑛ℎ𝑑ℎ𝑙 elements for each token. In model deployment, this heavy KV cache is a large bottleneck that limits the maximum batch size and sequence length.
-
-[105] T `body          ` p7 · 10.9pt · 2 lines
+[102] T `body          ` p7 · 10.9pt · 2 lines
       2.1.2. Low-Rank Key-Value Joint Compression The core of MLA is the low-rank joint compression for keys and values to reduce KV cache:
 
-[106] T `body          ` p7 · 10.5pt · 6 lines
-      where c𝑡𝐾𝑉 ∈ R𝑑𝑐 is the compressed latent vector for keys and values; 𝑑𝑐 (≪ 𝑑ℎ𝑛ℎ) denotes the KV are the up-projection matrices for keys and values, respectively. During inference, MLA only needs to cache c𝑡𝐾𝑉 , so its KV cache has only 𝑑𝑐 𝑙 elements, where 𝑙 denotes the number of layers. In addition, during inference, since 𝑊𝑈 𝐾 can be absorbed into 𝑊𝑄 , and 𝑊𝑈𝑉 can be absorbed into 𝑊𝑂, we even do not need to compute keys and values out for attention. Figure 3 intuitively illustrates how the KV joint compression in MLA reduces the KV cache.
+[103] T `body          ` p7 · 10.9pt · 7 lines
+      where c𝑡𝐾𝑉 ∈ R𝑑𝑐 is the compressed latent vector for keys and values; 𝑑𝑐 (≪ 𝑑ℎ𝑛ℎ) denotes the KV compression dimension; 𝑊 𝐷𝐾𝑉 ∈ R𝑑𝑐 ×𝑑 is the down-projection matrix; and 𝑊𝑈 𝐾 , 𝑊𝑈𝑉 ∈ R𝑑ℎ 𝑛ℎ ×𝑑𝑐 are the up-projection matrices for keys and values, respectively. During inference, MLA only needs to cache c𝑡𝐾𝑉 , so its KV cache has only 𝑑𝑐 𝑙 elements, where 𝑙 denotes the number of layers. In addition, during inference, since 𝑊𝑈 𝐾 can be absorbed into 𝑊𝑄 , and 𝑊𝑈𝑉 can be absorbed into 𝑊𝑂, we even do not need to compute keys and values out for attention. Figure 3 intuitively illustrates how the KV joint compression in MLA reduces the KV cache.
 
-[107] T `body          ` p7 · 10.9pt · 1 lines · continues on the next page
+[104] T `body          ` p7 · 10.9pt · 1 lines · continues on the next page
       Moreover, in order to reduce the activation memory during training, we also perform low-rank compression for the queries, even if it cannot reduce the KV cache:
 
 ## Page 8 (two columns)
 
-[108] T `body          ` p8 · 10.9pt · 1 lines · (continuation of a paragraph from the previous page)
+[105] T `body          ` p8 · 10.9pt · 1 lines · (continuation of a paragraph from the previous page)
       low-rank compression for the queries, even if it cannot reduce the KV cache:
 
-[109] T `body          ` p8 · 10pt · 1 lines
-      where c𝑡𝑄 ∈ R𝑑𝑐′ is the compressed latent vector for queries; 𝑑𝑐′ (≪ 𝑑ℎ𝑛ℎ) denotes the query
+[106] T `body          ` p8 · 10.9pt · 3 lines
+      where c𝑡𝑄 ∈ R𝑑𝑐′ is the compressed latent vector for queries; 𝑑𝑐′ (≪ 𝑑ℎ𝑛ℎ) denotes the query compression dimension; and 𝑊 𝐷𝑄 ∈ R𝑑𝑐 ×𝑑 , 𝑊𝑈𝑄 ∈ R𝑑ℎ 𝑛ℎ ×𝑑𝑐 are the down-projection and upprojection matrices for queries, respectively.
 
-[110] · `figure-data   ` p8 · 7.3pt · 1 lines
-      compression dimension; and 𝑊 𝐷𝑄 ∈ R𝑑𝑐 ×𝑑 , 𝑊𝑈𝑄 ∈ R𝑑ℎ 𝑛ℎ ×𝑑𝑐 are the down-projection and up-
-
-[111] T `body          ` p8 · 10.9pt · 1 lines
-      projection matrices for queries, respectively.
-
-[112] T `body          ` p8 · 10.9pt · 5 lines
+[107] T `body          ` p8 · 10.9pt · 5 lines
       2.1.3. Decoupled Rotary Position Embedding Following DeepSeek 67B (DeepSeek-AI, 2024), we intend to use the Rotary Position Embedding (RoPE) (Su et al., 2024) for DeepSeek-V2. However, RoPE is incompatible with low-rank KV compression. To be specific, RoPE is position-sensitive for both keys and queries. If we apply RoPE for the keys k𝐶, 𝑊𝑈 𝐾 in Equation 10 will be coupled with a position-sensitive RoPE matrix.
 
-[113] T `body          ` p8 · 10.5pt · 4 lines
+[108] T `body          ` p8 · 10.9pt · 4 lines
       In this way, 𝑊𝑈 𝐾 cannot be absorbed into 𝑊𝑄 any more during inference, since a RoPE matrix related to the currently generating token will lie between 𝑊𝑄 and 𝑊𝑈 𝐾 and matrix multiplication does not obey a commutative law. As a result, we must recompute the keys for all the prefix tokens during inference, which will significantly hinder the inference efficiency.
 
-[114] T `body          ` p8 · 10.9pt · 4 lines
+[109] T `body          ` p8 · 10.9pt · 4 lines
       As a solution, we propose the decoupled RoPE strategy that uses additional multi-head queries q ∈ R ℎ and a shared key k ∈ R ℎ to carry RoPE, where 𝑑 denotes the per-head dimension of the decoupled queries and key. Equipped with the decoupled RoPE strategy, MLA performs the following computation:
 
-[115] · `figure-data   ` p8 · 7.3pt · 1 lines
-      where 𝑊𝑄𝑅 ∈ R𝑑ℎ 𝑛ℎ ×𝑑𝑐 and 𝑊 𝐾𝑅 ∈ R𝑑ℎ ×𝑑 are matrices to produce the decouples queries and key,
+[110] T `body          ` p8 · 10.9pt · 4 lines
+      where 𝑊𝑄𝑅 ∈ R𝑑ℎ 𝑛ℎ ×𝑑𝑐 and 𝑊 𝐾𝑅 ∈ R𝑑ℎ ×𝑑 are matrices to produce the decouples queries and key, respectively; RoPE(·) denotes the operation that applies RoPE matrices; and [·; ·] denotes the concatenation operation. During inference, the decoupled key should also be cached. Therefore, DeepSeek-V2 requires a total KV cache containing (𝑑𝑐 + 𝑑ℎ𝑅 )𝑙 elements.
 
-[116] T `body          ` p8 · 10.9pt · 3 lines
-      respectively; RoPE(·) denotes the operation that applies RoPE matrices; and [·; ·] denotes the concatenation operation. During inference, the decoupled key should also be cached. Therefore, DeepSeek-V2 requires a total KV cache containing (𝑑𝑐 + 𝑑ℎ𝑅 )𝑙 elements.
-
-[117] T `body          ` p8 · 10.9pt · 2 lines
+[111] T `body          ` p8 · 10.9pt · 2 lines
       In order to demonstrate the complete computation process of MLA, we also organize and provide its full formulas in Appendix C.
 
-[118] T `body          ` p8 · 10.9pt · 4 lines
+[112] T `body          ` p8 · 10.9pt · 4 lines
       2.1.4. Comparison of Key-Value Cache We demonstrate a comparison of the KV cache per token among different attention mechanisms in Table 1. MLA requires only a small amount of KV cache, equal to GQA with only 2.25 groups, but can achieve stronger performance than MHA.

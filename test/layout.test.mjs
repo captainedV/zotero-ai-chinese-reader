@@ -404,6 +404,109 @@ test('font tiers give heading levels from the size histogram', () => {
   assertEqual(M.Layout.tierOf(10, tiers), 0);
 });
 
+console.log('\n== punctuation-first paragraph rules ==');
+
+test('a caption continues through a figure fragment and a column break', () => {
+  // The Figure 1 caption of the R1 paper: the sentence wraps, a 4.9 pt axis label
+  // sorts in between, and the tail lands on a line indented into the next column.
+  const page = {
+    pageIndex: 0,
+    height: 842,
+    width: 595,
+    paragraphs: [
+      { id: 'c', role: 'figure-caption', translatable: true, fontSize: 10.9,
+        text: 'Figure 1 | (a) AIME accuracy of DeepSeek-R1-Zero during training. AIME takes a mathematical',
+        rect: [71, 560, 524, 581], rects: [[71, 560, 524, 581]], lines: [] },
+      { id: 'frag', role: 'figure-data', translatable: false, fontSize: 4.9,
+        text: 'Steps', rect: [411, 590, 440, 600], rects: [[411, 590, 440, 600]], lines: [] },
+      { id: 'tail', role: 'body', translatable: true, fontSize: 10.9,
+        text: 'problem as input and a number as output, illustrated in Table 32. Pass@1 and Cons@16 are described in Supplementary D.1. The baseline is the average score achieved by human participants. Note that a training step refers to a single policy update',
+        rect: [71, 537, 524, 558], rects: [[71, 537, 524, 558]], lines: [] },
+      // Last line of the caption, indented into the neighbouring column: the R1 PDF
+      // really does place "operation." like this.
+      { id: 'last', role: 'body', translatable: true, fontSize: 10.9,
+        text: 'operation.',
+        rect: [273, 512, 330, 533], rects: [[273, 512, 330, 533]], lines: [] }
+    ]
+  };
+  M.Layout.mergeBrokenSentences([page]);
+  const ids = page.paragraphs.map(p => p.id);
+  assert(!ids.includes('tail'), `tail should be absorbed: ${ids.join(',')}`);
+  const caption = page.paragraphs.find(p => p.id === 'c');
+  assertEqual(caption.role, 'figure-caption', 'the merged block stays a caption');
+  assert(caption.text.endsWith('operation.'), caption.text);
+  assert(caption.text.includes('problem as input and a number as output'), caption.text);
+  assert(caption.text.includes('Supplementary D.1.'), caption.text);
+  assert(caption.text.includes('human participants'), caption.text);
+});
+
+test('a paragraph whose sentence is unfinished absorbs the next line, even when indented', () => {
+  const page = {
+    pageIndex: 0, height: 842, width: 595,
+    paragraphs: [
+      { id: 'a', role: 'body', translatable: true, fontSize: 10.9,
+        text: 'Our high-performance RL infrastructure is described in Supplementary B.1, ensuring scalable',
+        rect: [88, 700, 500, 721], rects: [[88, 700, 500, 721]], lines: [] },
+      { id: 'b', role: 'body', translatable: true, fontSize: 10.9,
+        text: 'and efficient training.', rect: [71, 686, 200, 700], rects: [[71, 686, 200, 700]], lines: [] }
+    ]
+  };
+  M.Layout.mergeBrokenSentences([page]);
+  assertEqual(page.paragraphs.length, 1, 'the dedented line belongs to the paragraph');
+  assertEqual(page.paragraphs[0].text, 'Our high-performance RL infrastructure is described in Supplementary B.1, ensuring scalable and efficient training.');
+});
+
+test('a finished sentence is never glued to the next paragraph', () => {
+  const page = {
+    pageIndex: 0, height: 842, width: 595,
+    paragraphs: [
+      { id: 'a', role: 'body', translatable: true, fontSize: 10.9, text: 'The first paragraph ends properly.',
+        rect: [71, 700, 500, 721], rects: [[71, 700, 500, 721]], lines: [] },
+      { id: 'b', role: 'body', translatable: true, fontSize: 10.9, text: 'the next one starts lowercase but is new',
+        rect: [71, 686, 500, 700], rects: [[71, 686, 500, 700]], lines: [] }
+    ]
+  };
+  M.Layout.mergeBrokenSentences([page]);
+  assertEqual(page.paragraphs.length, 2);
+});
+
+test('prose that starts with a math symbol is body text, not a formula', () => {
+  const ctx = { bodySize: 10.9, pageHeight: 842, isFirstPage: false, inAbstract: false, seenBody: true, topBand: false, tocPage: false };
+  const cases = [
+    '𝐜𝑡 = 𝐖𝐷𝑄𝐡𝑡 where 𝐜𝑡 ∈ ℝ𝑑𝑐 denotes the compressed latent vector for queries',
+    'where 𝜋𝑟𝑒𝑓 is a reference policy, the term 𝐾𝐿 is a penalty and 𝑟𝑖 is the advantage',
+    'x_{i} represents the input token and y_{i} the target',
+    '= softmax(QK^T / √d) (2)'
+  ];
+  const roles = cases.map(text => {
+    const verdict = M.Layout.classifyParagraph(
+      { text, fontSize: 10.9, rect: [71, 500, 520, 512], lines: [{ text, rect: [71, 500, 520, 512], fontSize: 10.9, items: [{ text, rect: [71, 500, 520, 512] }] }] },
+      ctx
+    );
+    return verdict.role;
+  });
+  assertEqual(roles[0], 'body', `"${cases[0].slice(0, 30)}" → ${roles[0]}`);
+  assertEqual(roles[1], 'body', `"${cases[1].slice(0, 30)}" → ${roles[1]}`);
+  assertEqual(roles[2], 'body', `"${cases[2].slice(0, 30)}" → ${roles[2]}`);
+  assertEqual(roles[3], 'formula', `"${cases[3].slice(0, 30)}" → ${roles[3]}`);
+});
+
+test('a body paragraph that mentions a figure is not a caption', () => {
+  const ctx = { bodySize: 10.9, pageHeight: 842, isFirstPage: false, inAbstract: false, seenBody: true, topBand: false, tocPage: false };
+  const verdict = M.Layout.classifyParagraph(
+    { text: 'Figure 1(a) depicts the performance trajectory of DeepSeek-R1-Zero on the AIME 2024 benchmark throughout training.',
+      fontSize: 10.9, rect: [71, 400, 520, 430], lines: [] },
+    ctx
+  );
+  assertEqual(verdict.role, 'body', verdict.role);
+  const caption = M.Layout.classifyParagraph(
+    { text: 'Figure 1 | (a) AIME accuracy of DeepSeek-R1-Zero during training.',
+      fontSize: 10.9, rect: [71, 100, 520, 120], lines: [] },
+    ctx
+  );
+  assertEqual(caption.role, 'figure-caption', caption.role);
+});
+
 console.log('\n== markdown ==');
 const MD = loadPlugin('markdown.js').Markdown;
 test('renders headings, lists and bold', () => {

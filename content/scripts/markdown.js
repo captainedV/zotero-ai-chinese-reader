@@ -20,6 +20,10 @@
 
 	function inline(text) {
 		let out = escapeHtml(text);
+		// Math first: the renderer must not touch the sup/sub tags it produces.
+		out = out.replace(/\$\$([^$]{1,400})\$\$/g, (match, body) => ` ${M.Latex.renderInline(body)} `);
+		out = out.replace(/\$([^$\n]{1,300})\$/g, (match, body) => M.Latex.renderInline(body));
+		out = out.replace(/\\\(([\s\S]{1,300}?)\\\)/g, (match, body) => M.Latex.renderInline(body));
 		out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
 		out = out.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
 		out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');

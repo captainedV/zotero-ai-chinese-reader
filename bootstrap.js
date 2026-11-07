@@ -15,6 +15,7 @@ const MOONLIT_SCRIPTS = [
 	'content/scripts/layout.js',
 	'content/scripts/sentences.js',
 	'content/scripts/quotes.js',
+	'content/scripts/latex.js',
 	'content/scripts/markdown.js',
 	'content/scripts/prompts.js',
 	'content/scripts/ai.js',

@@ -366,7 +366,14 @@
 			const text = state.translations.get(segment.id);
 			if (text) {
 				segment.el.classList.remove('ml-pending');
-				segment.el.textContent = text;
+				// Math in the translation needs real superscripts/subscripts; the
+				// renderer escapes first, so this cannot inject markup.
+				if (M.Latex?.hasMath(text)) {
+					segment.el.innerHTML = M.Latex.toHtml(text);
+				}
+				else {
+					segment.el.textContent = text;
+				}
 			}
 			else if (segment.pending) {
 				segment.el.classList.add('ml-pending');

@@ -803,6 +803,21 @@
 		}
 		app.setFeature('summary', false);
 
+		// ------------------------------------------------ math in the translation
+		// Superscripts and subscripts used to be painted as raw LaTeX, which readers
+		// cannot parse; the card must render them.
+		const mathCard = doc.querySelector('.ml-para .ml-trans');
+		if (mathCard) {
+			mathCard.textContent = '';
+			M.Prefs.set('targetLang', 'zh-CN');
+		}
+		const mathHtml = M.Latex.toHtml('其中 $\\mathbf{c}_t^{Q} \\in \\mathbb{R}^{d}$ 表示潜向量，$x_{i}^{2}$ 为平方项。');
+		check('a translation containing math renders real sub/superscripts',
+			mathHtml.includes('ℝ') && /[ᑫᵈ<sup>]/.test(mathHtml) && !mathHtml.includes('\\mathbf'),
+			mathHtml.slice(0, 80));
+		check('math rendering escapes markup from the model',
+			!M.Latex.toHtml('<img src=x onerror=1> $x^{<b>}$').includes('<img'));
+
 		// --------------------------------------------------- highlight default
 		check('AI key points default to off', window.__prefsAtBoot?.enableHighlight === false,
 			String(window.__prefsAtBoot?.enableHighlight));
